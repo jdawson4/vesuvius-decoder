@@ -41,6 +41,9 @@ if USE_MIXED_PRECISION:
 seed = 3
 tf.random.set_seed(seed)
 
+epochs = 10
+steps_per_epoch = 1000
+
 
 def resize(img):
     current_width, current_height = img.size
@@ -173,38 +176,38 @@ def is_in_masked_zone(location, mask):
 sample_random_location_train = lambda x: sample_random_location(mask.shape)
 is_in_mask_train = lambda x: is_in_masked_zone(x, mask)
 
-
-def is_in_val_zone(location):
-    # x = location[0]
-    # y = location[1]
-    # # seems like there's a problem here with using these tensor slices as
+@tf.function
+def is_in_val_zone(location, val_location, val_zone_size):
+    print(location)
+    x = location[0]
+    y = location[1]
+    # seems like there's a problem here with using these tensor slices as
     # ints. Ensure that we're using just the integer values!
-    x = tf.get_static_value(location[0])
-    y = tf.get_static_value(location[1])
-    if (x==None) or (y==None):
-        # seems like there's another problem of using those ints where they
-        # become None for some reason...
-        return False
-    x_match = (
-        val_location[0] - BUFFER <= x <= val_location[0] + val_zone_size[0] + BUFFER
+    x_match = tf.math.logical_and(
+        tf.math.less_equal(tf.constant(val_location[0] - BUFFER), x),
+        tf.math.less_equal(x, tf.constant(val_location[0] + val_zone_size[0] + BUFFER))
     )
-    y_match = (
-        val_location[1] - BUFFER <= y <= val_location[1] + val_zone_size[1] + BUFFER
+    y_match = tf.math.logical_and(
+        tf.math.less_equal(tf.constant(val_location[1] - BUFFER), y),
+        tf.math.less_equal(y, tf.constant(val_location[1] + val_zone_size[1] + BUFFER))
     )
-    return x_match and y_match
+    return tf.get_static_value(tf.logical_and(x_match, y_match))
 
 
 def is_proper_train_location(location):
-    return not is_in_val_zone(location) and is_in_mask_train(location)
+    print(location)
+    return not is_in_val_zone(location, val_location=val_location, val_zone_size=val_zone_size) and is_in_mask_train(location)
 
 
-train_locations_ds = (
-    tf.data.Dataset.from_tensor_slices([0])
-    .repeat()
-    .map(sample_random_location_train, num_parallel_calls=tf.data.AUTOTUNE)
-)
+train_locations_ds = tf.data.Dataset.from_tensor_slices([0]).repeat().map(sample_random_location_train, num_parallel_calls=tf.data.AUTOTUNE)
 train_locations_ds = train_locations_ds.filter(is_proper_train_location)
+print(f"CARDINALITY OF TRAIN LOCATIONS DATASET: {train_locations_ds.cardinality().numpy()}")
 
+#for x, y in train_locations_ds.take(1):
+#    print(x)
+#    print(y)
+
+print("HERE1")
 
 def extract_subvolume(location, volume):
     x = location[0]
@@ -228,6 +231,8 @@ def extract_subvolume_and_label(location):
     label = extract_labels(location, labels)
     return subvolume, label
 
+print("HERE2")
+
 
 shuffle_buffer_size = BATCH_SIZE * 4
 
@@ -235,6 +240,8 @@ train_ds = train_locations_ds.map(
     extract_subvolume_and_label, num_parallel_calls=tf.data.AUTOTUNE
 )
 train_ds = train_ds.prefetch(tf.data.AUTOTUNE).batch(BATCH_SIZE)
+
+print("HERE3")
 
 for subvolume_batch, label_batch in train_ds.take(1):
     print(f"subvolume shape: {subvolume_batch.shape[1:]}")
@@ -244,7 +251,9 @@ t0 = time.time()
 n = 200
 for _ in train_ds.take(n):
     pass
-print(f"Time per batch: {(time.time() - t0) / n:.4f}s") # NANs here?
+print(f"Time per batch: {(time.time() - t0) / n:.4f}s")
+
+print("HERE4")
 
 val_locations_stride = BUFFER
 val_locations = []
@@ -264,6 +273,8 @@ val_ds = val_locations_ds.map(
 )
 val_ds = val_ds.prefetch(tf.data.AUTOTUNE).batch(BATCH_SIZE)
 
+print("HERE5")
+
 
 def trivial_baseline(dataset):
     total = 0
@@ -275,7 +286,9 @@ def trivial_baseline(dataset):
 
 
 score = trivial_baseline(val_ds).numpy()
-print(f"Best validation score achievable trivially: {score * 100:.2f}% accuracy")
+print(f"Best validation score achievable trivially: {score * 100:.2f}% accuracy") # NANs here?
+
+print("HERE6")
 
 augmenter = keras.Sequential(
     [
@@ -380,7 +393,7 @@ model.compile(
     jit_compile=USE_JIT_COMPILE,
 )
 
-model.fit(augmented_train_ds, validation_data=val_ds, epochs=10, steps_per_epoch=1000)
+model.fit(augmented_train_ds, validation_data=val_ds, epochs=epochs, steps_per_epoch=steps_per_epoch)
 model.save("model.keras")
 
 del volume
