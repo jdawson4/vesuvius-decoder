@@ -43,6 +43,8 @@ tf.random.set_seed(seed)
 
 epochs = 10 # originally 20
 steps_per_epoch = 100 # originally 1000
+learnRate = 0.001 # default: 0.001
+momentum = 0.9 # default: 0.9
 
 
 def resize(img):
@@ -370,15 +372,23 @@ del train_ds
 # this can be done better using concatenation/densenets, either with conv
 # layers or perhaps with self-attention? This is where I want to experiment!
 
+del volume
+del mask
+del labels
+
 
 def get_model(input_shape):
     # I'm going to make my own model, rather than take someone else's.
     # That's kinda the whole fun of this challenge, for me!
-    input = keras.Input(input_shape)
+    input=keras.Input(input_shape)
 
-    output = keras.layers.Conv2D(1, 3, strides=1, padding="same", activation="sigmoid")(
-        input
-    )
+    output=keras.layers.Conv2D(
+        filters=1,
+        kernel_size=3,
+        strides=1,
+        padding="same",
+        activation="sigmoid"
+    )(input)
 
     model = keras.Model(input, output)
     return model
@@ -387,10 +397,13 @@ def get_model(input_shape):
 model = get_model((BUFFER * 2, BUFFER * 2, Z_DIM))
 model.summary()
 model.compile(
-    optimizer="adam",
-    loss="binary_crossentropy",
+    #optimizer="adam",
+    optimizer=tf.keras.optimizers.Adam(learning_rate=learnRate, beta_1=momentum),
+    #loss="binary_crossentropy",
+    loss=tf.keras.losses.BinaryCrossentropy(),
     metrics=["accuracy"],
     jit_compile=USE_JIT_COMPILE,
+    # run_eagerly=True, # an error message told me to do this?
 )
 
 model.fit(augmented_train_ds,
@@ -400,12 +413,12 @@ model.fit(augmented_train_ds,
 )
 model.save("model.keras")
 
-del volume
-del mask
-del labels
+#del volume
+#del mask
+#del labels
 #del train_ds
-del val_ds
 del augmented_train_ds
+del val_ds
 
 # Manually trigger garbage collection
 keras.backend.clear_session()
