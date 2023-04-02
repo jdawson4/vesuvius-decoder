@@ -41,8 +41,8 @@ if USE_MIXED_PRECISION:
 seed = 3
 tf.random.set_seed(seed)
 
-epochs = 10
-steps_per_epoch = 1000
+epochs = 10 # originally 20
+steps_per_epoch = 100 # originally 1000
 
 
 def resize(img):
@@ -199,7 +199,7 @@ def is_proper_train_location(location):
     return not is_in_val_zone(location, val_location=val_location, val_zone_size=val_zone_size) and is_in_mask_train(location)
 
 
-train_locations_ds = tf.data.Dataset.from_tensor_slices([0]).repeat().map(sample_random_location_train, num_parallel_calls=tf.data.AUTOTUNE)
+train_locations_ds = tf.data.Dataset.from_tensor_slices([0]).repeat(steps_per_epoch).map(sample_random_location_train, num_parallel_calls=tf.data.AUTOTUNE)
 train_locations_ds = train_locations_ds.filter(is_proper_train_location)
 print(f"CARDINALITY OF TRAIN LOCATIONS DATASET: {train_locations_ds.cardinality().numpy()}")
 
@@ -393,7 +393,11 @@ model.compile(
     jit_compile=USE_JIT_COMPILE,
 )
 
-model.fit(augmented_train_ds, validation_data=val_ds, epochs=epochs, steps_per_epoch=steps_per_epoch)
+model.fit(augmented_train_ds,
+          validation_data=val_ds,
+          epochs=epochs,
+          #steps_per_epoch=steps_per_epoch
+)
 model.save("model.keras")
 
 del volume
