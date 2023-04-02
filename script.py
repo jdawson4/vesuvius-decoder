@@ -274,6 +274,10 @@ augmented_train_ds = train_ds.map(augment_train_data, num_parallel_calls=tf.data
     # Define the model
     model = keras.Model(inputs, outputs)
     return model'''
+# important note: the above model will be ~2 million params!
+# it also appears to be using an addition-based residual u-net. I wonder if
+# this can be done better using concatenation/densenets, either with conv
+# layers or perhaps with self-attention? This is where I want to experiment!
 
 def get_model(input_shape):
     # I'm going to make my own model, rather than take someone else's.
