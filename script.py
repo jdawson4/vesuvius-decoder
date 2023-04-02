@@ -35,6 +35,9 @@ BATCH_SIZE = 32
 USE_MIXED_PRECISION = True
 USE_JIT_COMPILE = False
 
+if USE_MIXED_PRECISION:
+    keras.mixed_precision.set_global_policy("mixed_float16")
+
 
 def resize(img):
     current_width, current_height = img.size
@@ -169,11 +172,19 @@ is_in_mask_train = lambda x: is_in_masked_zone(x, mask)
 
 
 def is_in_val_zone(location):
-    x = location[0]
-    y = location[1]
+    # x = location[0]
+    # y = location[1]
+    # # seems like there's a problem here with using these tensor slices as
+    # ints. Ensure that we're using just the integer values!
+    x = tf.get_static_value(location[0])
+    y = tf.get_static_value(location[1])
+    if (x==None) or (y==None):
+        # seems like there's another problem of using those ints where they
+        # become None for some reason...
+        return False
     x_match = (
         val_location[0] - BUFFER <= x <= val_location[0] + val_zone_size[0] + BUFFER
-    )  # OOM ERROR HERE!
+    )
     y_match = (
         val_location[1] - BUFFER <= y <= val_location[1] + val_zone_size[1] + BUFFER
     )
@@ -255,9 +266,9 @@ def trivial_baseline(dataset):
     total = 0
     matches = 0.0
     for batch_label in dataset:
-        matches += tf.reduce_sum(tf.cast(batch_label, "float32"))
+        matches += tf.reduce_sum(tf.cast(batch_label, "float16")) # issue here has to do with adding objects of differing shapes???
         total += tf.reduce_prod(tf.shape(batch_label))
-    return 1.0 - matches / tf.cast(total, "float32")
+    return 1.0 - matches / tf.cast(total, "float16")
 
 
 score = trivial_baseline(val_ds).numpy()
@@ -278,6 +289,8 @@ def augment_train_data(data, label):
 augmented_train_ds = train_ds.map(
     augment_train_data, num_parallel_calls=tf.data.AUTOTUNE
 ).prefetch(tf.data.AUTOTUNE)
+
+del train_ds
 
 """def get_model(input_shape):
     inputs = keras.Input(input_shape)
@@ -355,9 +368,6 @@ def get_model(input_shape):
     return model
 
 
-if USE_MIXED_PRECISION:
-    keras.mixed_precision.set_global_policy("mixed_float16")
-
 model = get_model((BUFFER * 2, BUFFER * 2, Z_DIM))
 model.summary()
 model.compile(
@@ -373,8 +383,9 @@ model.save("model.keras")
 del volume
 del mask
 del labels
-del train_ds
+#del train_ds
 del val_ds
+del augmented_train_ds
 
 # Manually trigger garbage collection
 keras.backend.clear_session()
