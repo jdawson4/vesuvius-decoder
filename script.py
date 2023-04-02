@@ -2,8 +2,16 @@
 #
 # Note: I'm looking at
 # www.kaggle.com/code/fchollet/keras-starter-kit-unet-train-on-full-dataset
-# to begin with. Francois Chollet is an industry giant, and the mind behind
-# keras, my preferred DL framework
+# to begin with. François Chollet (look at that, the keyboard accepted my
+# accent mark!) is an industry giant, and the mind behind keras, my preferred
+# DL library
+#
+# FChollet has written a ton of preprocessing code for this project which I
+# was struggling with, and I wanted to start with it because it seems that he's
+# inviting people to use his code as a jumping-off point for writing their own
+# keras models. What I really want to experiment with/get to is the ability to
+# try different network structures, so I'll largely be adapting from the
+# notebook that monsieur Chollet left on kaggle
 
 import numpy as np
 import tensorflow as tf
