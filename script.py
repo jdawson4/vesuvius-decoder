@@ -38,6 +38,9 @@ USE_JIT_COMPILE = False
 if USE_MIXED_PRECISION:
     keras.mixed_precision.set_global_policy("mixed_float16")
 
+seed = 3
+tf.random.set_seed(seed)
+
 
 def resize(img):
     current_width, current_height = img.size
@@ -241,7 +244,7 @@ t0 = time.time()
 n = 200
 for _ in train_ds.take(n):
     pass
-print(f"Time per batch: {(time.time() - t0) / n:.4f}s")
+print(f"Time per batch: {(time.time() - t0) / n:.4f}s") # NANs here?
 
 val_locations_stride = BUFFER
 val_locations = []
@@ -265,10 +268,10 @@ val_ds = val_ds.prefetch(tf.data.AUTOTUNE).batch(BATCH_SIZE)
 def trivial_baseline(dataset):
     total = 0
     matches = 0.0
-    for batch_label in dataset:
-        matches += tf.reduce_sum(tf.cast(batch_label, "float16")) # issue here has to do with adding objects of differing shapes???
+    for _, batch_label in dataset:
+        matches += tf.reduce_sum(batch_label)
         total += tf.reduce_prod(tf.shape(batch_label))
-    return 1.0 - matches / tf.cast(total, "float16")
+    return 1.0 - tf.cast(matches, dtype="float16") / tf.cast(total, dtype="float16")
 
 
 score = trivial_baseline(val_ds).numpy()
