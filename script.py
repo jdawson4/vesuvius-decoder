@@ -141,7 +141,7 @@ is_in_mask_train = lambda x: is_in_masked_zone(x, mask)
 def is_in_val_zone(location):
     x = location[0]
     y = location[1]
-    x_match = val_location[0] - BUFFER <= x <= val_location[0] + val_zone_size[0] + BUFFER
+    x_match = val_location[0] - BUFFER <= x <= val_location[0] + val_zone_size[0] + BUFFER # OOM ERROR HERE!
     y_match = val_location[1] - BUFFER <= y <= val_location[1] + val_zone_size[1] + BUFFER
     return x_match and y_match
 
