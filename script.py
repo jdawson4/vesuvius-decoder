@@ -42,7 +42,7 @@ seed = 3
 tf.random.set_seed(seed)
 
 epochs = 10 # originally 20
-steps_per_epoch = 100 # originally 1000
+steps_per_epoch = 100 * BATCH_SIZE # originally 1000
 learnRate = 0.001 # default: 0.001
 momentum = 0.9 # default: 0.9
 
@@ -178,9 +178,8 @@ def is_in_masked_zone(location, mask):
 sample_random_location_train = lambda x: sample_random_location(mask.shape)
 is_in_mask_train = lambda x: is_in_masked_zone(x, mask)
 
-@tf.function
 def is_in_val_zone(location, val_location, val_zone_size):
-    print(location)
+    #print(location)
     x = location[0]
     y = location[1]
     # seems like there's a problem here with using these tensor slices as
@@ -197,25 +196,29 @@ def is_in_val_zone(location, val_location, val_zone_size):
 
 
 def is_proper_train_location(location):
-    print(location)
-    return not is_in_val_zone(location, val_location=val_location, val_zone_size=val_zone_size) and is_in_mask_train(location)
+    #print(location)
+    return not (is_in_val_zone(location, val_location=val_location, val_zone_size=val_zone_size) and is_in_mask_train(location))
 
 
 train_locations_ds = tf.data.Dataset.from_tensor_slices([0]).repeat(steps_per_epoch).map(sample_random_location_train, num_parallel_calls=tf.data.AUTOTUNE)
+#for location in train_locations_ds.take(1):
+#    print(location)
+#print(f"CARDINALITY OF TRAIN LOCATIONS DATASET BEFORE FILTER: {train_locations_ds.cardinality().numpy()}")
 train_locations_ds = train_locations_ds.filter(is_proper_train_location)
-print(f"CARDINALITY OF TRAIN LOCATIONS DATASET: {train_locations_ds.cardinality().numpy()}")
+#print(f"CARDINALITY OF TRAIN LOCATIONS DATASET AFTER FILTER: {train_locations_ds.cardinality().numpy()}")
 
-#for x, y in train_locations_ds.take(1):
-#    print(x)
-#    print(y)
+#for location in train_locations_ds.take(1):
+#    print("NANs in location?", tf.math.reduce_any(tf.math.is_nan(location)))
+#    print(location)
 
-print("HERE1")
+#print("HERE1")
 
 def extract_subvolume(location, volume):
     x = location[0]
     y = location[1]
     subvolume = volume[x - BUFFER : x + BUFFER, y - BUFFER : y + BUFFER, :]
-    subvolume = tf.cast(subvolume, dtype="float16") / 65535.0
+    #subvolume = tf.cast(subvolume, dtype="float16") / 65535.0
+    subvolume = tf.cast(subvolume, dtype="float16")
     return subvolume
 
 
@@ -233,7 +236,7 @@ def extract_subvolume_and_label(location):
     label = extract_labels(location, labels)
     return subvolume, label
 
-print("HERE2")
+#print("HERE2")
 
 
 shuffle_buffer_size = BATCH_SIZE * 4
@@ -243,19 +246,25 @@ train_ds = train_locations_ds.map(
 )
 train_ds = train_ds.prefetch(tf.data.AUTOTUNE).batch(BATCH_SIZE)
 
-print("HERE3")
+#print("HERE3")
 
 for subvolume_batch, label_batch in train_ds.take(1):
     print(f"subvolume shape: {subvolume_batch.shape[1:]}")
     print(f"label_batch shape: {label_batch.shape[1:]}")
+    #print("NANs in subvolume_batch?", tf.math.reduce_any(tf.math.is_nan(subvolume_batch)))
 
 t0 = time.time()
-n = 200
-for _ in train_ds.take(n):
+n = steps_per_epoch//5
+#show_value = True
+for subvolume, label in train_ds.take(n):
+    #if show_value:
+    #    print(subvolume, label)
+    #show_value = False
+    #print("NANs in train subvolume?", tf.math.reduce_any(tf.math.is_nan(subvolume)))
     pass
 print(f"Time per batch: {(time.time() - t0) / n:.4f}s")
 
-print("HERE4")
+#print("HERE4")
 
 val_locations_stride = BUFFER
 val_locations = []
@@ -275,25 +284,34 @@ val_ds = val_locations_ds.map(
 )
 val_ds = val_ds.prefetch(tf.data.AUTOTUNE).batch(BATCH_SIZE)
 
-print("HERE5")
+#print("HERE5")
 
 
 def trivial_baseline(dataset):
     total = 0
     matches = 0.0
     for _, batch_label in dataset:
-        matches += tf.reduce_sum(batch_label)
-        total += tf.reduce_prod(tf.shape(batch_label))
-    return 1.0 - tf.cast(matches, dtype="float16") / tf.cast(total, dtype="float16")
+        #print(batch_label)
+        #print("NANS HERE?", tf.reduce_sum(batch_label), tf.reduce_prod(tf.shape(batch_label)))
+        matches += tf.cast(tf.reduce_sum(batch_label), dtype = "float32")
+        total += tf.cast(tf.reduce_prod(tf.shape(batch_label)), dtype = "float32")
+    #print("NANS HERE?", matches, total)
+    #print("OR HERE:", tf.cast(1.0 - (matches / total), dtype="float16"))
+    return tf.cast(1.0 - (matches / total), dtype="float16")
 
 
 score = trivial_baseline(val_ds).numpy()
 print(f"Best validation score achievable trivially: {score * 100:.2f}% accuracy") # NANs here?
 
-print("HERE6")
+for subvolume, label in val_ds.take(1):
+    print("VAL_DS LOOKS LIKE:", subvolume.shape, label.shape)
 
+#print("HERE6")
+
+# THIS IS CREATING NANs
 augmenter = keras.Sequential(
     [
+        #keras.Input((BUFFER * 2, BUFFER * 2, Z_DIM), dtype='float16'),
         keras.layers.RandomContrast(0.2),
     ]
 )
@@ -307,6 +325,15 @@ def augment_train_data(data, label):
 augmented_train_ds = train_ds.map(
     augment_train_data, num_parallel_calls=tf.data.AUTOTUNE
 ).prefetch(tf.data.AUTOTUNE)
+
+for subvolume, label in train_ds.take(1):
+    print("NANs in train subvolume?", tf.math.reduce_any(tf.math.is_nan(subvolume)))
+    #print("NANs in label?", tf.math.reduce_any(tf.math.is_nan(label)))
+    #print("TRAIN_DS LOOKS LIKE:", subvolume.shape, label.shape)
+for subvolume, label in augmented_train_ds.take(1):
+    print("NANs in augmented subvolume?", tf.math.reduce_any(tf.math.is_nan(subvolume)))
+    #print("NANs in label?", tf.math.reduce_any(tf.math.is_nan(label)))
+    #print("AUG_DS LOOKS LIKE:", subvolume.shape, label.shape)
 
 del train_ds
 
@@ -377,10 +404,12 @@ del mask
 del labels
 
 
+# THIS IS CREATING NANs
 def get_model(input_shape):
     # I'm going to make my own model, rather than take someone else's.
     # That's kinda the whole fun of this challenge, for me!
-    input=keras.Input(input_shape)
+    input=keras.Input(input_shape, dtype='float16')
+    output=keras.layers.Rescaling(scale=1/65535.0, offset=0)(input)
 
     output=keras.layers.Conv2D(
         filters=1,
@@ -388,7 +417,7 @@ def get_model(input_shape):
         strides=1,
         padding="same",
         activation="sigmoid"
-    )(input)
+    )(output)
 
     model = keras.Model(input, output)
     return model
@@ -412,6 +441,19 @@ model.fit(augmented_train_ds,
           #steps_per_epoch=steps_per_epoch
 )
 model.save("model.keras")
+
+'''def model_train_data(data, label):
+    data = model(data)
+    return data, label
+
+nan_ds = augmented_train_ds.map(
+    model_train_data, num_parallel_calls=tf.data.AUTOTUNE
+).prefetch(tf.data.AUTOTUNE)
+
+for subvolume, label in nan_ds.take(1):
+    #print("NANs in subvolume?", tf.math.reduce_any(tf.math.is_nan(subvolume)))
+    #print("NANs in label?", tf.math.reduce_any(tf.math.is_nan(label)))
+    print("NAN_DS LOOKS LIKE:", subvolume.shape, label.shape)'''
 
 #del volume
 #del mask
