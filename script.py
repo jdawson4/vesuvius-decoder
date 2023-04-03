@@ -28,11 +28,11 @@ DATA_DIR = "../vesuvius-data/"
 BUFFER = 32  # Half-size of papyrus patches we'll use as model inputs
 Z_DIM = 64  # Number of slices in the z direction. Max value is 64 - Z_START
 Z_START = 0  # Offset of slices in the z direction
-SHARED_HEIGHT = 2000  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
+SHARED_HEIGHT = 1400  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
 
 # Model config
 BATCH_SIZE = 32
-USE_MIXED_PRECISION = True
+USE_MIXED_PRECISION = False
 USE_JIT_COMPILE = False
 
 if USE_MIXED_PRECISION:
@@ -105,7 +105,7 @@ def load_volume(split, index):
     for filename in z_slices_fnames:
         img = PIL.Image.open(filename)
         img = resize(img)
-        z_slice = np.array(img, dtype="float16")
+        z_slice = np.array(img, dtype="float32")
         z_slices.append(z_slice)
     return tf.stack(z_slices, axis=-1)
 
@@ -217,8 +217,8 @@ def extract_subvolume(location, volume):
     x = location[0]
     y = location[1]
     subvolume = volume[x - BUFFER : x + BUFFER, y - BUFFER : y + BUFFER, :]
-    #subvolume = tf.cast(subvolume, dtype="float16") / 65535.0
-    subvolume = tf.cast(subvolume, dtype="float16")
+    #subvolume = tf.cast(subvolume, dtype="float32") / 65535.0
+    subvolume = tf.cast(subvolume, dtype="float32")
     return subvolume
 
 
@@ -226,7 +226,7 @@ def extract_labels(location, labels):
     x = location[0]
     y = location[1]
     label = labels[x - BUFFER : x + BUFFER, y - BUFFER : y + BUFFER]
-    label = tf.cast(label, dtype="float16")
+    label = tf.cast(label, dtype="float32")
     label = tf.expand_dims(label, axis=-1)
     return label
 
@@ -296,8 +296,8 @@ def trivial_baseline(dataset):
         matches += tf.cast(tf.reduce_sum(batch_label), dtype = "float32")
         total += tf.cast(tf.reduce_prod(tf.shape(batch_label)), dtype = "float32")
     #print("NANS HERE?", matches, total)
-    #print("OR HERE:", tf.cast(1.0 - (matches / total), dtype="float16"))
-    return tf.cast(1.0 - (matches / total), dtype="float16")
+    #print("OR HERE:", tf.cast(1.0 - (matches / total), dtype="float32"))
+    return tf.cast(1.0 - (matches / total), dtype="float32")
 
 
 score = trivial_baseline(val_ds).numpy()
@@ -311,7 +311,7 @@ for subvolume, label in val_ds.take(1):
 # THIS IS CREATING NANs
 augmenter = keras.Sequential(
     [
-        #keras.Input((BUFFER * 2, BUFFER * 2, Z_DIM), dtype='float16'),
+        #keras.Input((BUFFER * 2, BUFFER * 2, Z_DIM), dtype='float32'),
         keras.layers.RandomContrast(0.2),
     ]
 )
@@ -408,7 +408,7 @@ del labels
 def get_model(input_shape):
     # I'm going to make my own model, rather than take someone else's.
     # That's kinda the whole fun of this challenge, for me!
-    input=keras.Input(input_shape, dtype='float16')
+    input=keras.Input(input_shape, dtype='float32')
     output=keras.layers.Rescaling(scale=1/65535.0, offset=0)(input)
 
     output=keras.layers.Conv2D(
@@ -432,7 +432,7 @@ model.compile(
     loss=tf.keras.losses.BinaryCrossentropy(),
     metrics=["accuracy"],
     jit_compile=USE_JIT_COMPILE,
-    # run_eagerly=True, # an error message told me to do this?
+    run_eagerly=True,
 )
 
 model.fit(augmented_train_ds,
@@ -494,7 +494,7 @@ def compute_predictions_map(split, index):
         extract_subvolume_test, num_parallel_calls=tf.data.AUTOTUNE
     )
 
-    predictions_map = np.zeros(test_volume.shape[:2] + (1,), dtype="float16")
+    predictions_map = np.zeros(test_volume.shape[:2] + (1,), dtype="float32")
     predictions_map_counts = np.zeros(test_volume.shape[:2] + (1,), dtype="int8")
 
     print(f"Compute predictions")
