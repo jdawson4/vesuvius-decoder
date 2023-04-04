@@ -30,7 +30,7 @@ DATA_DIR = "../vesuvius-data/"
 BUFFER = 32  # Half-size of papyrus patches we'll use as model inputs
 Z_DIM = 64  # Number of slices in the z direction. Max value is 64 - Z_START
 Z_START = 0  # Offset of slices in the z direction
-SHARED_HEIGHT = 1024  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
+SHARED_HEIGHT = 1600  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
 
 # Model config
 BATCH_SIZE = 32
@@ -40,11 +40,17 @@ USE_JIT_COMPILE = False
 if USE_MIXED_PRECISION:
     keras.mixed_precision.set_global_policy("mixed_float16")
 
+physical_devices = tf.config.experimental.list_physical_devices('GPU')
+num_gpus = len(physical_devices)
+print(f"Num GPUs: {num_gpus}")
+if len(physical_devices) > 0:
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
 seed = 3
 tf.random.set_seed(seed)
 
-epochs = 500 # originally 20
-steps_per_epoch = 100 * BATCH_SIZE # originally 1000
+epochs = 50 # originally 20
+steps_per_epoch = 1000 * BATCH_SIZE # originally 1000
 learnRate = 0.001 # default: 0.001
 momentum = 0.9 # default: 0.9
 epoch_interval = 5
@@ -108,21 +114,23 @@ def load_volume(split, index):
     for filename in z_slices_fnames:
         img = PIL.Image.open(filename)
         img = resize(img)
-        z_slice = np.array(img, dtype="float32")
+        z_slice = np.array(img, dtype="float16")
         z_slices.append(z_slice)
-    return tf.stack(z_slices, axis=-1)
+    return tf.cast(tf.stack(z_slices, axis=-1), dtype="float32")
+
+gc.collect()
 
 
-volume_train_1 = load_volume(split="train", index=1)
+volume = load_volume(split="train", index=1)
 # print(f"volume_train_1: {volume_train_1.shape}, {volume_train_1.dtype}")
 
-volume_train_2 = load_volume(split="train", index=2)
+volume = tf.concat([volume, load_volume(split="train", index=2)], axis=1)
 # print(f"volume_train_2: {volume_train_2.shape}, {volume_train_2.dtype}")
 
-volume_train_3 = load_volume(split="train", index=3)
+volume = tf.concat([volume, load_volume(split="train", index=3)], axis=1)
 # print(f"volume_train_3: {volume_train_3.shape}, {volume_train_3.dtype}")
 
-volume = tf.concat([volume_train_1, volume_train_2, volume_train_3], axis=1)
+#volume = tf.concat([volume_train_1, volume_train_2, volume_train_3], axis=1)
 # so what has happened now is that we have a 2D image containing our ENTIRE
 # train set, shaped [4000,8417,20] (that is, a 2D image 20 layers deep!), which
 # contains pages 1, 2, and 3. Similarly, our labels and mask (set below) will
@@ -131,9 +139,11 @@ volume = tf.concat([volume_train_1, volume_train_2, volume_train_3], axis=1)
 # with because my computer is getting OOM errors
 print(f"total volume: {volume.shape}")
 
-del volume_train_1
-del volume_train_2
-del volume_train_3
+#del volume_train_1
+#del volume_train_2
+#del volume_train_3
+
+gc.collect()
 
 labels = tf.concat([labels_train_1, labels_train_2, labels_train_3], axis=1)
 print(f"labels: {labels.shape}, {labels.dtype}")
@@ -321,7 +331,7 @@ augmenter = keras.Sequential(
 
 
 def augment_train_data(data, label):
-    data = augmenter(data)
+    data = tf.cast(augmenter(data), dtype="float32")
     return data, label
 
 
@@ -413,6 +423,9 @@ model.summary()
 model.compile(
     #optimizer="adam",
     optimizer=tf.keras.optimizers.Adam(learning_rate=learnRate, beta_1=momentum),
+    #optimizer=tf.train.experimental.enable_mixed_precision_graph_rewrite(
+    #    tf.keras.optimizers.Adam(learning_rate=learnRate, beta_1=momentum)
+    #),
     #loss="binary_crossentropy",
     loss=tf.keras.losses.BinaryCrossentropy(),
     metrics=["accuracy"],

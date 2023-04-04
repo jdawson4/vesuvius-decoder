@@ -2,3 +2,4 @@
 
 *.keras
 /__pycache__
+/ckpts
