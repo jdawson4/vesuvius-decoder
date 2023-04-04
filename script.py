@@ -43,10 +43,11 @@ if USE_MIXED_PRECISION:
 seed = 3
 tf.random.set_seed(seed)
 
-epochs = 10 # originally 20
+epochs = 500 # originally 20
 steps_per_epoch = 100 * BATCH_SIZE # originally 1000
 learnRate = 0.001 # default: 0.001
 momentum = 0.9 # default: 0.9
+epoch_interval = 5
 
 
 def resize(img):
@@ -424,9 +425,18 @@ model.compile(
 # loss: 0.1243 - accuracy: 0.9513 - val_loss: 0.8680 - val_accuracy: 0.7115
 # consider this the number to beat :)
 
+class EveryKCallback(keras.callbacks.Callback):
+    def __init__(self,epoch_interval=epoch_interval):
+        self.epoch_interval = epoch_interval
+    def on_epoch_begin(self,epoch,logs=None):
+        if ((epoch % self.epoch_interval)==0):
+            self.model.save_weights("ckpts/ckpt"+str(epoch), overwrite=True, save_format='h5')
+            #self.model.save('network',overwrite=True)
+
 model.fit(augmented_train_ds,
           validation_data=val_ds,
           epochs=epochs,
+          callbacks=[EveryKCallback(epoch_interval=2)], # custom callbacks here!
           #steps_per_epoch=steps_per_epoch
 )
 model.save("model.keras")
