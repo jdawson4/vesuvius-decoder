@@ -23,12 +23,14 @@ import glob
 import time
 import gc
 
+from architecture import *
+
 # Data config
 DATA_DIR = "../vesuvius-data/"
 BUFFER = 32  # Half-size of papyrus patches we'll use as model inputs
 Z_DIM = 64  # Number of slices in the z direction. Max value is 64 - Z_START
 Z_START = 0  # Offset of slices in the z direction
-SHARED_HEIGHT = 1400  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
+SHARED_HEIGHT = 1024  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
 
 # Model config
 BATCH_SIZE = 32
@@ -398,30 +400,12 @@ del train_ds
 # it also appears to be using an addition-based residual u-net. I wonder if
 # this can be done better using concatenation/densenets, either with conv
 # layers or perhaps with self-attention? This is where I want to experiment!
+#
+# new model will be located in architecture.py!
 
 del volume
 del mask
 del labels
-
-
-# THIS IS CREATING NANs
-def get_model(input_shape):
-    # I'm going to make my own model, rather than take someone else's.
-    # That's kinda the whole fun of this challenge, for me!
-    input=keras.Input(input_shape, dtype='float32')
-    output=keras.layers.Rescaling(scale=1/65535.0, offset=0)(input)
-
-    output=keras.layers.Conv2D(
-        filters=1,
-        kernel_size=3,
-        strides=1,
-        padding="same",
-        activation="sigmoid"
-    )(output)
-
-    model = keras.Model(input, output)
-    return model
-
 
 model = get_model((BUFFER * 2, BUFFER * 2, Z_DIM))
 model.summary()
@@ -434,6 +418,11 @@ model.compile(
     jit_compile=USE_JIT_COMPILE,
     run_eagerly=True,
 )
+
+# for no reason at all, I'll note that this is the last line in monsieur
+# Chollet's training regime:
+# loss: 0.1243 - accuracy: 0.9513 - val_loss: 0.8680 - val_accuracy: 0.7115
+# consider this the number to beat :)
 
 model.fit(augmented_train_ds,
           validation_data=val_ds,

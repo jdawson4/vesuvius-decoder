@@ -1,3 +1,4 @@
 # Author: Jacob Dawson
 
 *.keras
+/__pycache__
