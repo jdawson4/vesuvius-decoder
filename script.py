@@ -30,7 +30,9 @@ DATA_DIR = "../vesuvius-data/"
 BUFFER = 32  # Half-size of papyrus patches we'll use as model inputs
 Z_DIM = 64  # Number of slices in the z direction. Max value is 64 - Z_START
 Z_START = 0  # Offset of slices in the z direction
-SHARED_HEIGHT = 2560  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
+SHARED_HEIGHT = 3072  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
+# I've found out that 3584 will fit in my RAM, but you can increase this
+# if you've got more
 
 # Model config
 BATCH_SIZE = 32
@@ -123,9 +125,11 @@ gc.collect()
 
 volume = load_volume(split="train", index=1)
 # print(f"volume_train_1: {volume_train_1.shape}, {volume_train_1.dtype}")
+gc.collect()
 
 volume = tf.concat([volume, load_volume(split="train", index=2)], axis=1)
 # print(f"volume_train_2: {volume_train_2.shape}, {volume_train_2.dtype}")
+gc.collect()
 
 volume = tf.concat([volume, load_volume(split="train", index=3)], axis=1)
 # print(f"volume_train_3: {volume_train_3.shape}, {volume_train_3.dtype}")
@@ -439,6 +443,10 @@ model.compile(
 # Chollet's training regime:
 # loss: 0.1243 - accuracy: 0.9513 - val_loss: 0.8680 - val_accuracy: 0.7115
 # consider this the number to beat :)
+#
+# update: this was my 4 million param CNN's result:
+# loss: 0.0544 - accuracy: 0.9784 - val_loss: 0.1387 - val_accuracy: 0.9516
+# eat your heart out, Francois!
 
 class EveryKCallback(keras.callbacks.Callback):
     def __init__(self,epoch_interval=epoch_interval):
@@ -451,7 +459,7 @@ class EveryKCallback(keras.callbacks.Callback):
 model.fit(augmented_train_ds,
           validation_data=val_ds,
           epochs=epochs,
-          callbacks=[EveryKCallback(epoch_interval=2)], # custom callbacks here!
+          callbacks=[EveryKCallback()], # custom callbacks here!
           #steps_per_epoch=steps_per_epoch
 )
 model.save("model.keras")
