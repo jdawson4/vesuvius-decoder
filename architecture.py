@@ -44,8 +44,8 @@ def get_model(input_shape):
     # I'm going to make my own model, rather than take someone else's.
     # That's kinda the whole fun of this challenge, for me!
     input=keras.Input(input_shape, dtype='float32')
-    #output=keras.layers.Rescaling(scale=1/65535.0, offset=0)(input)
-    output=keras.layers.Normalization()(input)
+    output=keras.layers.Rescaling(scale=1./127.5, offset=-1.)(input) # MAKE THIS CHOICE BASED ON MIN/MAX FROM THE MAIN SCRIPT!
+    #output=keras.layers.Normalization()(input)
 
     output1024=convBlock(output,64,False,True) # output size 1024
     output512=downsample(output1024,64,False,True) # output size 512

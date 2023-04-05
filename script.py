@@ -30,7 +30,7 @@ DATA_DIR = "../vesuvius-data/"
 BUFFER = 32  # Half-size of papyrus patches we'll use as model inputs
 Z_DIM = 64  # Number of slices in the z direction. Max value is 64 - Z_START
 Z_START = 0  # Offset of slices in the z direction
-SHARED_HEIGHT = 2400  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
+SHARED_HEIGHT = 2560  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
 
 # Model config
 BATCH_SIZE = 32
@@ -114,9 +114,9 @@ def load_volume(split, index):
     for filename in z_slices_fnames:
         img = PIL.Image.open(filename)
         img = resize(img)
-        z_slice = np.array(img, dtype="uint16")
+        z_slice = np.array(img, dtype="uint16") // 256 # let's limit this int to be able to fit into an int8
         z_slices.append(z_slice)
-    return tf.cast(tf.stack(z_slices, axis=-1), dtype="uint16")
+    return tf.cast(tf.stack(z_slices, axis=-1), dtype="uint8") # A VERY IMPORTANT CHOICE WAS MADE HERE!
 
 gc.collect()
 
