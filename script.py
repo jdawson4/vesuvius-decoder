@@ -30,7 +30,7 @@ DATA_DIR = "../vesuvius-data/"
 BUFFER = 32  # Half-size of papyrus patches we'll use as model inputs
 Z_DIM = 64  # Number of slices in the z direction. Max value is 64 - Z_START
 Z_START = 0  # Offset of slices in the z direction
-SHARED_HEIGHT = 1600  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
+SHARED_HEIGHT = 2400  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
 
 # Model config
 BATCH_SIZE = 32
@@ -114,9 +114,9 @@ def load_volume(split, index):
     for filename in z_slices_fnames:
         img = PIL.Image.open(filename)
         img = resize(img)
-        z_slice = np.array(img, dtype="float16")
+        z_slice = np.array(img, dtype="uint16")
         z_slices.append(z_slice)
-    return tf.cast(tf.stack(z_slices, axis=-1), dtype="float32")
+    return tf.cast(tf.stack(z_slices, axis=-1), dtype="uint16")
 
 gc.collect()
 
@@ -137,7 +137,9 @@ volume = tf.concat([volume, load_volume(split="train", index=3)], axis=1)
 # contain all three pages as well!
 # note that the size listed above depends on SHARED_HEIGHT, which I might mess
 # with because my computer is getting OOM errors
-print(f"total volume: {volume.shape}")
+print(f"total volume: {volume.shape}, {volume.dtype}")
+print(f"Volume's max: {tf.math.reduce_max(volume)}, min: {tf.math.reduce_min(volume)},mean: {tf.math.reduce_mean(volume)}\n")
+#print(f"total volume: {volume.shape}")
 
 #del volume_train_1
 #del volume_train_2
@@ -331,7 +333,7 @@ augmenter = keras.Sequential(
 
 
 def augment_train_data(data, label):
-    data = tf.cast(augmenter(data), dtype="float32")
+    data = tf.cast(augmenter(tf.cast(data,dtype="float32")), dtype="float32")
     return data, label
 
 
