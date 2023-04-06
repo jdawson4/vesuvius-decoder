@@ -18,6 +18,7 @@ import tensorflow as tf
 from tensorflow import keras
 import PIL
 import tqdm
+from skimage.transform import resize as resize_ski
 
 import glob
 import time
@@ -30,7 +31,7 @@ DATA_DIR = "../vesuvius-data/"
 BUFFER = 32  # Half-size of papyrus patches we'll use as model inputs
 Z_DIM = 64  # Number of slices in the z direction. Max value is 64 - Z_START
 Z_START = 0  # Offset of slices in the z direction
-SHARED_HEIGHT = 3072  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
+SHARED_HEIGHT = 3584  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
 # I've found out that 3584 will fit in my RAM, but you can increase this
 # if you've got more
 
@@ -94,18 +95,6 @@ labels_train_2 = load_labels(split="train", index=2)
 mask_train_3 = load_mask(split="train", index=3)
 labels_train_3 = load_labels(split="train", index=3)
 
-"""print(f"mask_test_a: {mask_test_a.shape}")
-print(f"mask_test_b: {mask_test_b.shape}")
-print("-")
-print(f"mask_train_1: {mask_train_1.shape}")
-print(f"labels_train_1: {labels_train_1.shape}")
-print("-")
-print(f"mask_train_2: {mask_train_2.shape}")
-print(f"labels_train_2: {labels_train_2.shape}")
-print("-")
-print(f"mask_train_3: {mask_train_3.shape}")
-print(f"labels_train_3: {labels_train_3.shape}")"""
-
 
 def load_volume(split, index):
     # Load the 3d x-ray scan, one slice at a time
@@ -122,19 +111,11 @@ def load_volume(split, index):
 
 gc.collect()
 
-
 volume = load_volume(split="train", index=1)
-# print(f"volume_train_1: {volume_train_1.shape}, {volume_train_1.dtype}")
 gc.collect()
-
 volume = tf.concat([volume, load_volume(split="train", index=2)], axis=1)
-# print(f"volume_train_2: {volume_train_2.shape}, {volume_train_2.dtype}")
 gc.collect()
-
 volume = tf.concat([volume, load_volume(split="train", index=3)], axis=1)
-# print(f"volume_train_3: {volume_train_3.shape}, {volume_train_3.dtype}")
-
-#volume = tf.concat([volume_train_1, volume_train_2, volume_train_3], axis=1)
 # so what has happened now is that we have a 2D image containing our ENTIRE
 # train set, shaped [4000,8417,20] (that is, a 2D image 20 layers deep!), which
 # contains pages 1, 2, and 3. Similarly, our labels and mask (set below) will
@@ -143,11 +124,6 @@ volume = tf.concat([volume, load_volume(split="train", index=3)], axis=1)
 # with because my computer is getting OOM errors
 print(f"total volume: {volume.shape}, {volume.dtype}")
 print(f"Volume's max: {tf.math.reduce_max(volume)}, min: {tf.math.reduce_min(volume)},mean: {tf.math.reduce_mean(volume)}\n")
-#print(f"total volume: {volume.shape}")
-
-#del volume_train_1
-#del volume_train_2
-#del volume_train_3
 
 gc.collect()
 
@@ -167,7 +143,7 @@ del mask_train_3
 
 # val_location = (1300, 1000)
 # val_zone_size = (600, 2000)
-
+# gotta change these to match our variable height:
 val_location = (
     int((1300 / 4000) * SHARED_HEIGHT),
     int((1300 / 8417) * volume.shape[1]),
@@ -198,11 +174,10 @@ sample_random_location_train = lambda x: sample_random_location(mask.shape)
 is_in_mask_train = lambda x: is_in_masked_zone(x, mask)
 
 def is_in_val_zone(location, val_location, val_zone_size):
-    #print(location)
     x = location[0]
     y = location[1]
     # seems like there's a problem here with using these tensor slices as
-    # ints. Ensure that we're using just the integer values!
+    # ints in py comparisons. Use tf logic!
     x_match = tf.math.logical_and(
         tf.math.less_equal(tf.constant(val_location[0] - BUFFER), x),
         tf.math.less_equal(x, tf.constant(val_location[0] + val_zone_size[0] + BUFFER))
@@ -215,22 +190,11 @@ def is_in_val_zone(location, val_location, val_zone_size):
 
 
 def is_proper_train_location(location):
-    #print(location)
     return not (is_in_val_zone(location, val_location=val_location, val_zone_size=val_zone_size) and is_in_mask_train(location))
 
 
 train_locations_ds = tf.data.Dataset.from_tensor_slices([0]).repeat(steps_per_epoch).map(sample_random_location_train, num_parallel_calls=tf.data.AUTOTUNE)
-#for location in train_locations_ds.take(1):
-#    print(location)
-#print(f"CARDINALITY OF TRAIN LOCATIONS DATASET BEFORE FILTER: {train_locations_ds.cardinality().numpy()}")
 train_locations_ds = train_locations_ds.filter(is_proper_train_location)
-#print(f"CARDINALITY OF TRAIN LOCATIONS DATASET AFTER FILTER: {train_locations_ds.cardinality().numpy()}")
-
-#for location in train_locations_ds.take(1):
-#    print("NANs in location?", tf.math.reduce_any(tf.math.is_nan(location)))
-#    print(location)
-
-#print("HERE1")
 
 def extract_subvolume(location, volume):
     x = location[0]
@@ -255,7 +219,6 @@ def extract_subvolume_and_label(location):
     label = extract_labels(location, labels)
     return subvolume, label
 
-#print("HERE2")
 
 
 shuffle_buffer_size = BATCH_SIZE * 4
@@ -265,25 +228,17 @@ train_ds = train_locations_ds.map(
 )
 train_ds = train_ds.prefetch(tf.data.AUTOTUNE).batch(BATCH_SIZE)
 
-#print("HERE3")
 
 for subvolume_batch, label_batch in train_ds.take(1):
     print(f"subvolume shape: {subvolume_batch.shape[1:]}")
     print(f"label_batch shape: {label_batch.shape[1:]}")
-    #print("NANs in subvolume_batch?", tf.math.reduce_any(tf.math.is_nan(subvolume_batch)))
 
 t0 = time.time()
 n = steps_per_epoch//5
-#show_value = True
 for subvolume, label in train_ds.take(n):
-    #if show_value:
-    #    print(subvolume, label)
-    #show_value = False
-    #print("NANs in train subvolume?", tf.math.reduce_any(tf.math.is_nan(subvolume)))
     pass
 print(f"Time per batch: {(time.time() - t0) / n:.4f}s")
 
-#print("HERE4")
 
 val_locations_stride = BUFFER
 val_locations = []
@@ -303,19 +258,14 @@ val_ds = val_locations_ds.map(
 )
 val_ds = val_ds.prefetch(tf.data.AUTOTUNE).batch(BATCH_SIZE)
 
-#print("HERE5")
 
 
 def trivial_baseline(dataset):
     total = 0
     matches = 0.0
     for _, batch_label in dataset:
-        #print(batch_label)
-        #print("NANS HERE?", tf.reduce_sum(batch_label), tf.reduce_prod(tf.shape(batch_label)))
         matches += tf.cast(tf.reduce_sum(batch_label), dtype = "float32")
         total += tf.cast(tf.reduce_prod(tf.shape(batch_label)), dtype = "float32")
-    #print("NANS HERE?", matches, total)
-    #print("OR HERE:", tf.cast(1.0 - (matches / total), dtype="float32"))
     return tf.cast(1.0 - (matches / total), dtype="float32")
 
 
@@ -325,12 +275,10 @@ print(f"Best validation score achievable trivially: {score * 100:.2f}% accuracy"
 for subvolume, label in val_ds.take(1):
     print("VAL_DS LOOKS LIKE:", subvolume.shape, label.shape)
 
-#print("HERE6")
 
 # THIS IS CREATING NANs
 augmenter = keras.Sequential(
     [
-        #keras.Input((BUFFER * 2, BUFFER * 2, Z_DIM), dtype='float32'),
         keras.layers.RandomContrast(0.2),
     ]
 )
@@ -347,12 +295,8 @@ augmented_train_ds = train_ds.map(
 
 for subvolume, label in train_ds.take(1):
     print("NANs in train subvolume?", tf.math.reduce_any(tf.math.is_nan(subvolume)))
-    #print("NANs in label?", tf.math.reduce_any(tf.math.is_nan(label)))
-    #print("TRAIN_DS LOOKS LIKE:", subvolume.shape, label.shape)
 for subvolume, label in augmented_train_ds.take(1):
     print("NANs in augmented subvolume?", tf.math.reduce_any(tf.math.is_nan(subvolume)))
-    #print("NANs in label?", tf.math.reduce_any(tf.math.is_nan(label)))
-    #print("AUG_DS LOOKS LIKE:", subvolume.shape, label.shape)
 
 del train_ds
 
@@ -429,9 +373,6 @@ model.summary()
 model.compile(
     #optimizer="adam",
     optimizer=tf.keras.optimizers.Adam(learning_rate=learnRate, beta_1=momentum),
-    #optimizer=tf.train.experimental.enable_mixed_precision_graph_rewrite(
-    #    tf.keras.optimizers.Adam(learning_rate=learnRate, beta_1=momentum)
-    #),
     #loss="binary_crossentropy",
     loss=tf.keras.losses.BinaryCrossentropy(),
     metrics=["accuracy"],
@@ -464,23 +405,6 @@ model.fit(augmented_train_ds,
 )
 model.save("model.keras")
 
-'''def model_train_data(data, label):
-    data = model(data)
-    return data, label
-
-nan_ds = augmented_train_ds.map(
-    model_train_data, num_parallel_calls=tf.data.AUTOTUNE
-).prefetch(tf.data.AUTOTUNE)
-
-for subvolume, label in nan_ds.take(1):
-    #print("NANs in subvolume?", tf.math.reduce_any(tf.math.is_nan(subvolume)))
-    #print("NANs in label?", tf.math.reduce_any(tf.math.is_nan(label)))
-    print("NAN_DS LOOKS LIKE:", subvolume.shape, label.shape)'''
-
-#del volume
-#del mask
-#del labels
-#del train_ds
 del augmented_train_ds
 del val_ds
 
@@ -488,6 +412,8 @@ del val_ds
 keras.backend.clear_session()
 gc.collect()
 
+# training now completely over. Let's do predictions!
+# ...also, maybe move this to its own script?
 model = keras.models.load_model("model.keras")
 
 
@@ -536,8 +462,6 @@ def compute_predictions_map(split, index):
 
 predictions_map_a = compute_predictions_map(split="test", index="a")
 predictions_map_b = compute_predictions_map(split="test", index="b")
-
-from skimage.transform import resize as resize_ski
 
 original_size_a = PIL.Image.open(DATA_DIR + "/test/a/mask.png").size
 predictions_map_a = resize_ski(predictions_map_a, original_size_a).squeeze()
