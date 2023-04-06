@@ -43,7 +43,7 @@ USE_JIT_COMPILE = False
 if USE_MIXED_PRECISION:
     keras.mixed_precision.set_global_policy("mixed_float16")
 
-physical_devices = tf.config.experimental.list_physical_devices('GPU')
+physical_devices = tf.config.experimental.list_physical_devices("GPU")
 num_gpus = len(physical_devices)
 print(f"Num GPUs: {num_gpus}")
 if len(physical_devices) > 0:
@@ -52,10 +52,10 @@ if len(physical_devices) > 0:
 seed = 3
 tf.random.set_seed(seed)
 
-epochs = 50 # originally 20
-steps_per_epoch = 1000 * BATCH_SIZE # originally 1000
-learnRate = 0.001 # default: 0.001
-momentum = 0.9 # default: 0.9
+epochs = 50  # originally 20
+steps_per_epoch = 1000 * BATCH_SIZE  # originally 1000
+learnRate = 0.001  # default: 0.001
+momentum = 0.9  # default: 0.9
 epoch_interval = 5
 
 
@@ -105,9 +105,14 @@ def load_volume(split, index):
     for filename in z_slices_fnames:
         img = PIL.Image.open(filename)
         img = resize(img)
-        z_slice = np.array(img, dtype="uint16") // 256 # let's limit this int to be able to fit into an int8
+        z_slice = (
+            np.array(img, dtype="uint16") // 256
+        )  # let's limit this int to be able to fit into an int8
         z_slices.append(z_slice)
-    return tf.cast(tf.stack(z_slices, axis=-1), dtype="uint8") # A VERY IMPORTANT CHOICE WAS MADE HERE!
+    return tf.cast(
+        tf.stack(z_slices, axis=-1), dtype="uint8"
+    )  # A VERY IMPORTANT CHOICE WAS MADE HERE!
+
 
 gc.collect()
 
@@ -123,7 +128,9 @@ volume = tf.concat([volume, load_volume(split="train", index=3)], axis=1)
 # note that the size listed above depends on SHARED_HEIGHT, which I might mess
 # with because my computer is getting OOM errors
 print(f"total volume: {volume.shape}, {volume.dtype}")
-print(f"Volume's max: {tf.math.reduce_max(volume)}, min: {tf.math.reduce_min(volume)},mean: {tf.math.reduce_mean(volume)}\n")
+print(
+    f"Volume's max: {tf.math.reduce_max(volume)}, min: {tf.math.reduce_min(volume)},mean: {tf.math.reduce_mean(volume)}\n"
+)
 
 gc.collect()
 
@@ -173,6 +180,7 @@ def is_in_masked_zone(location, mask):
 sample_random_location_train = lambda x: sample_random_location(mask.shape)
 is_in_mask_train = lambda x: is_in_masked_zone(x, mask)
 
+
 def is_in_val_zone(location, val_location, val_zone_size):
     x = location[0]
     y = location[1]
@@ -180,27 +188,35 @@ def is_in_val_zone(location, val_location, val_zone_size):
     # ints in py comparisons. Use tf logic!
     x_match = tf.math.logical_and(
         tf.math.less_equal(tf.constant(val_location[0] - BUFFER), x),
-        tf.math.less_equal(x, tf.constant(val_location[0] + val_zone_size[0] + BUFFER))
+        tf.math.less_equal(x, tf.constant(val_location[0] + val_zone_size[0] + BUFFER)),
     )
     y_match = tf.math.logical_and(
         tf.math.less_equal(tf.constant(val_location[1] - BUFFER), y),
-        tf.math.less_equal(y, tf.constant(val_location[1] + val_zone_size[1] + BUFFER))
+        tf.math.less_equal(y, tf.constant(val_location[1] + val_zone_size[1] + BUFFER)),
     )
     return tf.get_static_value(tf.logical_and(x_match, y_match))
 
 
 def is_proper_train_location(location):
-    return not (is_in_val_zone(location, val_location=val_location, val_zone_size=val_zone_size) and is_in_mask_train(location))
+    return not (
+        is_in_val_zone(location, val_location=val_location, val_zone_size=val_zone_size)
+        and is_in_mask_train(location)
+    )
 
 
-train_locations_ds = tf.data.Dataset.from_tensor_slices([0]).repeat(steps_per_epoch).map(sample_random_location_train, num_parallel_calls=tf.data.AUTOTUNE)
+train_locations_ds = (
+    tf.data.Dataset.from_tensor_slices([0])
+    .repeat(steps_per_epoch)
+    .map(sample_random_location_train, num_parallel_calls=tf.data.AUTOTUNE)
+)
 train_locations_ds = train_locations_ds.filter(is_proper_train_location)
+
 
 def extract_subvolume(location, volume):
     x = location[0]
     y = location[1]
     subvolume = volume[x - BUFFER : x + BUFFER, y - BUFFER : y + BUFFER, :]
-    #subvolume = tf.cast(subvolume, dtype="float32") / 65535.0
+    # subvolume = tf.cast(subvolume, dtype="float32") / 65535.0
     subvolume = tf.cast(subvolume, dtype="float32")
     return subvolume
 
@@ -220,7 +236,6 @@ def extract_subvolume_and_label(location):
     return subvolume, label
 
 
-
 shuffle_buffer_size = BATCH_SIZE * 4
 
 train_ds = train_locations_ds.map(
@@ -234,7 +249,7 @@ for subvolume_batch, label_batch in train_ds.take(1):
     print(f"label_batch shape: {label_batch.shape[1:]}")
 
 t0 = time.time()
-n = steps_per_epoch//5
+n = steps_per_epoch // 5
 for subvolume, label in train_ds.take(n):
     pass
 print(f"Time per batch: {(time.time() - t0) / n:.4f}s")
@@ -259,18 +274,19 @@ val_ds = val_locations_ds.map(
 val_ds = val_ds.prefetch(tf.data.AUTOTUNE).batch(BATCH_SIZE)
 
 
-
 def trivial_baseline(dataset):
     total = 0
     matches = 0.0
     for _, batch_label in dataset:
-        matches += tf.cast(tf.reduce_sum(batch_label), dtype = "float32")
-        total += tf.cast(tf.reduce_prod(tf.shape(batch_label)), dtype = "float32")
+        matches += tf.cast(tf.reduce_sum(batch_label), dtype="float32")
+        total += tf.cast(tf.reduce_prod(tf.shape(batch_label)), dtype="float32")
     return tf.cast(1.0 - (matches / total), dtype="float32")
 
 
 score = trivial_baseline(val_ds).numpy()
-print(f"Best validation score achievable trivially: {score * 100:.2f}% accuracy") # NANs here?
+print(
+    f"Best validation score achievable trivially: {score * 100:.2f}% accuracy"
+)  # NANs here?
 
 for subvolume, label in val_ds.take(1):
     print("VAL_DS LOOKS LIKE:", subvolume.shape, label.shape)
@@ -285,7 +301,7 @@ augmenter = keras.Sequential(
 
 
 def augment_train_data(data, label):
-    data = tf.cast(augmenter(tf.cast(data,dtype="float32")), dtype="float32")
+    data = tf.cast(augmenter(tf.cast(data, dtype="float32")), dtype="float32")
     return data, label
 
 
@@ -371,9 +387,9 @@ del labels
 model = get_model((BUFFER * 2, BUFFER * 2, Z_DIM))
 model.summary()
 model.compile(
-    #optimizer="adam",
+    # optimizer="adam",
     optimizer=tf.keras.optimizers.Adam(learning_rate=learnRate, beta_1=momentum),
-    #loss="binary_crossentropy",
+    # loss="binary_crossentropy",
     loss=tf.keras.losses.BinaryCrossentropy(),
     metrics=["accuracy"],
     jit_compile=USE_JIT_COMPILE,
@@ -389,19 +405,25 @@ model.compile(
 # loss: 0.0544 - accuracy: 0.9784 - val_loss: 0.1387 - val_accuracy: 0.9516
 # eat your heart out, Francois!
 
-class EveryKCallback(keras.callbacks.Callback):
-    def __init__(self,epoch_interval=epoch_interval):
-        self.epoch_interval = epoch_interval
-    def on_epoch_begin(self,epoch,logs=None):
-        if ((epoch % self.epoch_interval)==0):
-            self.model.save_weights("ckpts/ckpt"+str(epoch), overwrite=True, save_format='h5')
-            #self.model.save('network',overwrite=True)
 
-model.fit(augmented_train_ds,
-          validation_data=val_ds,
-          epochs=epochs,
-          callbacks=[EveryKCallback()], # custom callbacks here!
-          #steps_per_epoch=steps_per_epoch
+class EveryKCallback(keras.callbacks.Callback):
+    def __init__(self, epoch_interval=epoch_interval):
+        self.epoch_interval = epoch_interval
+
+    def on_epoch_begin(self, epoch, logs=None):
+        if (epoch % self.epoch_interval) == 0:
+            self.model.save_weights(
+                "ckpts/ckpt" + str(epoch), overwrite=True, save_format="h5"
+            )
+            # self.model.save('network',overwrite=True)
+
+
+model.fit(
+    augmented_train_ds,
+    validation_data=val_ds,
+    epochs=epochs,
+    callbacks=[EveryKCallback()],  # custom callbacks here!
+    # steps_per_epoch=steps_per_epoch
 )
 model.save("model.keras")
 
