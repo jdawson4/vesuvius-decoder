@@ -65,6 +65,7 @@ epoch_interval = 5
 
 # functions here:
 
+
 def resize(img):
     current_width, current_height = img.size
     aspect_ratio = current_width / current_height
@@ -85,6 +86,7 @@ def load_labels(split, index):
     img = resize(img)
     return tf.convert_to_tensor(img, dtype="bool")
 
+
 def load_volume(split, index):
     # Load the 3d x-ray scan, one slice at a time
     z_slices_fnames = sorted(
@@ -102,6 +104,7 @@ def load_volume(split, index):
         tf.stack(z_slices, axis=-1), dtype="uint8"
     )  # A VERY IMPORTANT CHOICE WAS MADE HERE!
 
+
 def sample_random_location(shape):
     random_train_x = tf.random.uniform(
         shape=(), minval=BUFFER, maxval=shape[0] - BUFFER - 1, dtype="int32"
@@ -112,8 +115,10 @@ def sample_random_location(shape):
     random_train_location = tf.stack([random_train_x, random_train_y])
     return random_train_location
 
+
 def is_in_masked_zone(location, mask):
     return mask[location[0], location[1]]
+
 
 def is_in_val_zone(location, val_location, val_zone_size):
     x = location[0]
@@ -129,6 +134,7 @@ def is_in_val_zone(location, val_location, val_zone_size):
         tf.math.less_equal(y, tf.constant(val_location[1] + val_zone_size[1] + BUFFER)),
     )
     return tf.get_static_value(tf.logical_and(x_match, y_match))
+
 
 def extract_subvolume(location, volume):
     x = location[0]
@@ -147,6 +153,7 @@ def extract_labels(location, labels):
     label = tf.expand_dims(label, axis=-1)
     return label
 
+
 def trivial_baseline(dataset):
     total = 0
     matches = 0.0
@@ -155,15 +162,18 @@ def trivial_baseline(dataset):
         total += tf.cast(tf.reduce_prod(tf.shape(batch_label)), dtype="float32")
     return tf.cast(1.0 - (matches / total), dtype="float32")
 
+
 augmenter = keras.Sequential(
     [
         keras.layers.RandomContrast(0.2),
     ]
 )
 
+
 def augment_train_data(data, label):
     data = tf.cast(augmenter(tf.cast(data, dtype="float32")), dtype="float32")
     return data, label
+
 
 def main():
     mask = load_mask(split="train", index=1)
@@ -228,16 +238,16 @@ def main():
     )
     print(val_location, val_zone_size)
 
-
     sample_random_location_train = lambda x: sample_random_location(mask.shape)
     is_in_mask_train = lambda x: is_in_masked_zone(x, mask)
 
     def is_proper_train_location(location):
         return not (
-            is_in_val_zone(location, val_location=val_location, val_zone_size=val_zone_size)
+            is_in_val_zone(
+                location, val_location=val_location, val_zone_size=val_zone_size
+            )
             and is_in_mask_train(location)
         )
-
 
     train_locations_ds = (
         tf.data.Dataset.from_tensor_slices([0])
@@ -245,7 +255,6 @@ def main():
         .map(sample_random_location_train, num_parallel_calls=tf.data.AUTOTUNE)
     )
     train_locations_ds = train_locations_ds.filter(is_proper_train_location)
-
 
     shuffle_buffer_size = BATCH_SIZE * 4
 
@@ -259,7 +268,6 @@ def main():
     )
     train_ds = train_ds.prefetch(tf.data.AUTOTUNE).batch(BATCH_SIZE)
 
-
     for subvolume_batch, label_batch in train_ds.take(1):
         print(f"subvolume shape: {subvolume_batch.shape[1:]}")
         print(f"label_batch shape: {label_batch.shape[1:]}")
@@ -269,7 +277,6 @@ def main():
     for subvolume, label in train_ds.take(n):
         pass
     print(f"Time per batch: {(time.time() - t0) / n:.4f}s")
-
 
     val_locations_stride = BUFFER
     val_locations = []
@@ -289,7 +296,6 @@ def main():
     )
     val_ds = val_ds.prefetch(tf.data.AUTOTUNE).batch(BATCH_SIZE)
 
-
     score = trivial_baseline(val_ds).numpy()
     print(
         f"Best validation score achievable trivially: {score * 100:.2f}% accuracy"
@@ -298,7 +304,6 @@ def main():
     for subvolume, label in val_ds.take(1):
         print("VAL_DS LOOKS LIKE:", subvolume.shape, label.shape)
 
-
     augmented_train_ds = train_ds.map(
         augment_train_data, num_parallel_calls=tf.data.AUTOTUNE
     ).prefetch(tf.data.AUTOTUNE)
@@ -306,7 +311,10 @@ def main():
     for subvolume, label in train_ds.take(1):
         print("NANs in train subvolume?", tf.math.reduce_any(tf.math.is_nan(subvolume)))
     for subvolume, label in augmented_train_ds.take(1):
-        print("NANs in augmented subvolume?", tf.math.reduce_any(tf.math.is_nan(subvolume)))
+        print(
+            "NANs in augmented subvolume?",
+            tf.math.reduce_any(tf.math.is_nan(subvolume)),
+        )
 
     del train_ds
 
@@ -342,7 +350,6 @@ def main():
     # loss: 0.0544 - accuracy: 0.9784 - val_loss: 0.1387 - val_accuracy: 0.9516
     # eat your heart out, Francois!
 
-
     class EveryKCallback(keras.callbacks.Callback):
         def __init__(self, epoch_interval=epoch_interval):
             self.epoch_interval = epoch_interval
@@ -353,7 +360,6 @@ def main():
                     "ckpts/ckpt" + str(epoch), overwrite=True, save_format="h5"
                 )
                 # self.model.save('network',overwrite=True)
-
 
     model.fit(
         augmented_train_ds,
@@ -371,5 +377,6 @@ def main():
     keras.backend.clear_session()
     gc.collect()
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     main()
