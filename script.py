@@ -13,6 +13,8 @@
 # try different network structures, so I'll largely be adapting from the
 # notebook that monsieur Chollet left on kaggle
 
+# imports here:
+
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
@@ -25,6 +27,8 @@ import time
 import gc
 
 from architecture import *
+
+# constants here:
 
 # Data config
 DATA_DIR = "../vesuvius-data/"
@@ -59,6 +63,7 @@ learnRate = 0.001  # default: 0.001
 momentum = 0.9  # default: 0.9
 epoch_interval = 5
 
+# functions here:
 
 def resize(img):
     current_width, current_height = img.size
@@ -80,23 +85,6 @@ def load_labels(split, index):
     img = resize(img)
     return tf.convert_to_tensor(img, dtype="bool")
 
-
-mask = load_mask(split="train", index=1)
-labels = load_labels(split="train", index=1)
-
-mask_test_a = load_mask(split="test", index="a")
-mask_test_b = load_mask(split="test", index="b")
-
-mask_train_1 = load_mask(split="train", index=1)
-labels_train_1 = load_labels(split="train", index=1)
-
-mask_train_2 = load_mask(split="train", index=2)
-labels_train_2 = load_labels(split="train", index=2)
-
-mask_train_3 = load_mask(split="train", index=3)
-labels_train_3 = load_labels(split="train", index=3)
-
-
 def load_volume(split, index):
     # Load the 3d x-ray scan, one slice at a time
     z_slices_fnames = sorted(
@@ -114,6 +102,90 @@ def load_volume(split, index):
         tf.stack(z_slices, axis=-1), dtype="uint8"
     )  # A VERY IMPORTANT CHOICE WAS MADE HERE!
 
+def sample_random_location(shape):
+    random_train_x = tf.random.uniform(
+        shape=(), minval=BUFFER, maxval=shape[0] - BUFFER - 1, dtype="int32"
+    )
+    random_train_y = tf.random.uniform(
+        shape=(), minval=BUFFER, maxval=shape[1] - BUFFER - 1, dtype="int32"
+    )
+    random_train_location = tf.stack([random_train_x, random_train_y])
+    return random_train_location
+
+def is_in_masked_zone(location, mask):
+    return mask[location[0], location[1]]
+
+def is_in_val_zone(location, val_location, val_zone_size):
+    x = location[0]
+    y = location[1]
+    # seems like there's a problem here with using these tensor slices as
+    # ints in py comparisons. Use tf logic!
+    x_match = tf.math.logical_and(
+        tf.math.less_equal(tf.constant(val_location[0] - BUFFER), x),
+        tf.math.less_equal(x, tf.constant(val_location[0] + val_zone_size[0] + BUFFER)),
+    )
+    y_match = tf.math.logical_and(
+        tf.math.less_equal(tf.constant(val_location[1] - BUFFER), y),
+        tf.math.less_equal(y, tf.constant(val_location[1] + val_zone_size[1] + BUFFER)),
+    )
+    return tf.get_static_value(tf.logical_and(x_match, y_match))
+
+def is_proper_train_location(location):
+    return not (
+        is_in_val_zone(location, val_location=val_location, val_zone_size=val_zone_size)
+        and is_in_mask_train(location)
+    )
+
+def extract_subvolume(location, volume):
+    x = location[0]
+    y = location[1]
+    subvolume = volume[x - BUFFER : x + BUFFER, y - BUFFER : y + BUFFER, :]
+    # subvolume = tf.cast(subvolume, dtype="float32") / 65535.0
+    subvolume = tf.cast(subvolume, dtype="float32")
+    return subvolume
+
+
+def extract_labels(location, labels):
+    x = location[0]
+    y = location[1]
+    label = labels[x - BUFFER : x + BUFFER, y - BUFFER : y + BUFFER]
+    label = tf.cast(label, dtype="float32")
+    label = tf.expand_dims(label, axis=-1)
+    return label
+
+
+def extract_subvolume_and_label(location):
+    subvolume = extract_subvolume(location, volume)
+    label = extract_labels(location, labels)
+    return subvolume, label
+
+def trivial_baseline(dataset):
+    total = 0
+    matches = 0.0
+    for _, batch_label in dataset:
+        matches += tf.cast(tf.reduce_sum(batch_label), dtype="float32")
+        total += tf.cast(tf.reduce_prod(tf.shape(batch_label)), dtype="float32")
+    return tf.cast(1.0 - (matches / total), dtype="float32")
+
+def augment_train_data(data, label):
+    data = tf.cast(augmenter(tf.cast(data, dtype="float32")), dtype="float32")
+    return data, label
+
+
+mask = load_mask(split="train", index=1)
+labels = load_labels(split="train", index=1)
+
+mask_test_a = load_mask(split="test", index="a")
+mask_test_b = load_mask(split="test", index="b")
+
+mask_train_1 = load_mask(split="train", index=1)
+labels_train_1 = load_labels(split="train", index=1)
+
+mask_train_2 = load_mask(split="train", index=2)
+labels_train_2 = load_labels(split="train", index=2)
+
+mask_train_3 = load_mask(split="train", index=3)
+labels_train_3 = load_labels(split="train", index=3)
 
 gc.collect()
 
@@ -163,46 +235,8 @@ val_zone_size = (
 print(val_location, val_zone_size)
 
 
-def sample_random_location(shape):
-    random_train_x = tf.random.uniform(
-        shape=(), minval=BUFFER, maxval=shape[0] - BUFFER - 1, dtype="int32"
-    )
-    random_train_y = tf.random.uniform(
-        shape=(), minval=BUFFER, maxval=shape[1] - BUFFER - 1, dtype="int32"
-    )
-    random_train_location = tf.stack([random_train_x, random_train_y])
-    return random_train_location
-
-
-def is_in_masked_zone(location, mask):
-    return mask[location[0], location[1]]
-
-
 sample_random_location_train = lambda x: sample_random_location(mask.shape)
 is_in_mask_train = lambda x: is_in_masked_zone(x, mask)
-
-
-def is_in_val_zone(location, val_location, val_zone_size):
-    x = location[0]
-    y = location[1]
-    # seems like there's a problem here with using these tensor slices as
-    # ints in py comparisons. Use tf logic!
-    x_match = tf.math.logical_and(
-        tf.math.less_equal(tf.constant(val_location[0] - BUFFER), x),
-        tf.math.less_equal(x, tf.constant(val_location[0] + val_zone_size[0] + BUFFER)),
-    )
-    y_match = tf.math.logical_and(
-        tf.math.less_equal(tf.constant(val_location[1] - BUFFER), y),
-        tf.math.less_equal(y, tf.constant(val_location[1] + val_zone_size[1] + BUFFER)),
-    )
-    return tf.get_static_value(tf.logical_and(x_match, y_match))
-
-
-def is_proper_train_location(location):
-    return not (
-        is_in_val_zone(location, val_location=val_location, val_zone_size=val_zone_size)
-        and is_in_mask_train(location)
-    )
 
 
 train_locations_ds = (
@@ -211,30 +245,6 @@ train_locations_ds = (
     .map(sample_random_location_train, num_parallel_calls=tf.data.AUTOTUNE)
 )
 train_locations_ds = train_locations_ds.filter(is_proper_train_location)
-
-
-def extract_subvolume(location, volume):
-    x = location[0]
-    y = location[1]
-    subvolume = volume[x - BUFFER : x + BUFFER, y - BUFFER : y + BUFFER, :]
-    # subvolume = tf.cast(subvolume, dtype="float32") / 65535.0
-    subvolume = tf.cast(subvolume, dtype="float32")
-    return subvolume
-
-
-def extract_labels(location, labels):
-    x = location[0]
-    y = location[1]
-    label = labels[x - BUFFER : x + BUFFER, y - BUFFER : y + BUFFER]
-    label = tf.cast(label, dtype="float32")
-    label = tf.expand_dims(label, axis=-1)
-    return label
-
-
-def extract_subvolume_and_label(location):
-    subvolume = extract_subvolume(location, volume)
-    label = extract_labels(location, labels)
-    return subvolume, label
 
 
 shuffle_buffer_size = BATCH_SIZE * 4
@@ -275,15 +285,6 @@ val_ds = val_locations_ds.map(
 val_ds = val_ds.prefetch(tf.data.AUTOTUNE).batch(BATCH_SIZE)
 
 
-def trivial_baseline(dataset):
-    total = 0
-    matches = 0.0
-    for _, batch_label in dataset:
-        matches += tf.cast(tf.reduce_sum(batch_label), dtype="float32")
-        total += tf.cast(tf.reduce_prod(tf.shape(batch_label)), dtype="float32")
-    return tf.cast(1.0 - (matches / total), dtype="float32")
-
-
 score = trivial_baseline(val_ds).numpy()
 print(
     f"Best validation score achievable trivially: {score * 100:.2f}% accuracy"
@@ -301,11 +302,6 @@ augmenter = keras.Sequential(
 )
 
 
-def augment_train_data(data, label):
-    data = tf.cast(augmenter(tf.cast(data, dtype="float32")), dtype="float32")
-    return data, label
-
-
 augmented_train_ds = train_ds.map(
     augment_train_data, num_parallel_calls=tf.data.AUTOTUNE
 ).prefetch(tf.data.AUTOTUNE)
@@ -317,64 +313,7 @@ for subvolume, label in augmented_train_ds.take(1):
 
 del train_ds
 
-"""def get_model(input_shape):
-    inputs = keras.Input(input_shape)
-    
-    x = inputs
-    
-    ### [First half of the network: downsampling inputs] ###
-
-    # Entry block
-    x = layers.Conv2D(64, 3, strides=2, padding="same")(x)
-    x = layers.BatchNormalization()(x)
-
-    previous_block_activation = x  # Set aside residual
-
-    # Blocks 1, 2, 3 are identical apart from the feature depth.
-    for filters in [128, 256]:
-        x = layers.Activation("relu")(x)
-        x = layers.SeparableConv2D(filters, 3, padding="same")(x)
-        x = layers.BatchNormalization()(x)
-
-        x = layers.Activation("relu")(x)
-        x = layers.SeparableConv2D(filters, 3, padding="same")(x)
-        x = layers.BatchNormalization()(x)
-
-        x = layers.MaxPooling2D(3, strides=2, padding="same")(x)
-
-        # Project residual
-        residual = layers.Conv2D(filters, 1, strides=2, padding="same")(
-            previous_block_activation
-        )
-        x = layers.add([x, residual])  # Add back residual
-        previous_block_activation = x  # Set aside next residual
-
-    ### [Second half of the network: upsampling inputs] ###
-
-    for filters in [256, 128, 64]:
-        x = layers.Activation("relu")(x)
-        x = layers.Conv2DTranspose(filters, 3, padding="same")(x)
-        x = layers.BatchNormalization()(x)
-
-        x = layers.Activation("relu")(x)
-        x = layers.Conv2DTranspose(filters, 3, padding="same")(x)
-        x = layers.BatchNormalization()(x)
-
-        x = layers.UpSampling2D(2)(x)
-
-        # Project residual
-        residual = layers.UpSampling2D(2)(previous_block_activation)
-        residual = layers.Conv2D(filters, 1, padding="same")(residual)
-        x = layers.add([x, residual])  # Add back residual
-        previous_block_activation = x  # Set aside next residual
-
-    # Add a per-pixel classification layer
-    outputs = layers.Conv2D(1, 3, activation="sigmoid", padding="same")(x)
-
-    # Define the model
-    model = keras.Model(inputs, outputs)
-    return model"""
-# important note: the above model will be ~2 million params!
+# important note: the original model is ~2 million params!
 # it also appears to be using an addition-based residual u-net. I wonder if
 # this can be done better using concatenation/densenets, either with conv
 # layers or perhaps with self-attention? This is where I want to experiment!
@@ -434,79 +373,3 @@ del val_ds
 # Manually trigger garbage collection
 keras.backend.clear_session()
 gc.collect()
-
-# training now completely over. Let's do predictions!
-# ...also, maybe move this to its own script?
-model = keras.models.load_model("model.keras")
-
-
-def compute_predictions_map(split, index):
-    print(f"Load data for {split}/{index}")
-
-    test_volume = load_volume(split=split, index=index)
-    test_mask = load_mask(split=split, index=index)
-
-    test_locations = []
-    stride = BUFFER // 2
-    for x in range(BUFFER, test_volume.shape[0] - BUFFER, stride):
-        for y in range(BUFFER, test_volume.shape[1] - BUFFER, stride):
-            test_locations.append((x, y))
-
-    print(f"{len(test_locations)} test locations (before filtering by mask)")
-
-    sample_random_location_test = lambda x: sample_random_location(test_mask.shape)
-    is_in_mask_test = lambda x: is_in_masked_zone(x, test_mask)
-    extract_subvolume_test = lambda x: extract_subvolume(x, test_volume)
-
-    test_locations_ds = tf.data.Dataset.from_tensor_slices(test_locations).filter(
-        is_in_mask_test
-    )
-    test_ds = test_locations_ds.map(
-        extract_subvolume_test, num_parallel_calls=tf.data.AUTOTUNE
-    )
-
-    predictions_map = np.zeros(test_volume.shape[:2] + (1,), dtype="float32")
-    predictions_map_counts = np.zeros(test_volume.shape[:2] + (1,), dtype="int8")
-
-    print(f"Compute predictions")
-
-    for loc_batch, patch_batch in tqdm(
-        zip(test_locations_ds.batch(BATCH_SIZE), test_ds.batch(BATCH_SIZE))
-    ):
-        predictions = model.predict_on_batch(patch_batch)
-        for (x, y), pred in zip(loc_batch, predictions):
-            predictions_map[x - BUFFER : x + BUFFER, y - BUFFER : y + BUFFER, :] += pred
-            predictions_map_counts[
-                x - BUFFER : x + BUFFER, y - BUFFER : y + BUFFER, :
-            ] += 1
-    predictions_map /= predictions_map_counts + 1e-7
-    return predictions_map
-
-
-predictions_map_a = compute_predictions_map(split="test", index="a")
-predictions_map_b = compute_predictions_map(split="test", index="b")
-
-original_size_a = PIL.Image.open(DATA_DIR + "/test/a/mask.png").size
-predictions_map_a = resize_ski(predictions_map_a, original_size_a).squeeze()
-
-original_size_b = PIL.Image.open(DATA_DIR + "/test/b/mask.png").size
-predictions_map_b = resize_ski(predictions_map_b, original_size_b).squeeze()
-
-
-def rle(predictions_map, threshold):
-    flat_img = predictions_map.flatten()
-    flat_img = np.where(flat_img > threshold, 1, 0).astype(np.uint8)
-
-    starts = np.array((flat_img[:-1] == 0) & (flat_img[1:] == 1))
-    ends = np.array((flat_img[:-1] == 1) & (flat_img[1:] == 0))
-    starts_ix = np.where(starts)[0] + 2
-    ends_ix = np.where(ends)[0] + 2
-    lengths = ends_ix - starts_ix
-    return " ".join(map(str, sum(zip(starts_ix, lengths), ())))
-
-
-threshold = 0.5
-
-rle_a = rle(predictions_map_a, threshold=threshold)
-rle_b = rle(predictions_map_b, threshold=threshold)
-print("Id,Predicted\na," + rle_a + "\nb," + rle_b, file=open("submission.csv", "w"))
