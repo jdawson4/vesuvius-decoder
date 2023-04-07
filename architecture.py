@@ -39,7 +39,6 @@ def upsample(x, filters, apply_batchnorm=False, apply_dropout=False):
 
     return out
 
-# THIS IS CREATING NANs
 def get_model(input_shape):
     # I'm going to make my own model, rather than take someone else's.
     # That's kinda the whole fun of this challenge, for me!

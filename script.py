@@ -299,7 +299,7 @@ def main():
     score = trivial_baseline(val_ds).numpy()
     print(
         f"Best validation score achievable trivially: {score * 100:.2f}% accuracy"
-    )  # NANs here?
+    )
 
     for subvolume, label in val_ds.take(1):
         print("VAL_DS LOOKS LIKE:", subvolume.shape, label.shape)
