@@ -35,7 +35,7 @@ DATA_DIR = "../vesuvius-data/"
 BUFFER = 32  # Half-size of papyrus patches we'll use as model inputs
 Z_DIM = 64  # Number of slices in the z direction. Max value is 64 - Z_START
 Z_START = 0  # Offset of slices in the z direction
-SHARED_HEIGHT = 3584  # Height to resize all papyrii, originally 4000 but my computer is much worse than FChollet's so I might have to downsize
+SHARED_HEIGHT = 3712  # Height to resize all papyrii, originally 4000 but my computer is bad so I'll have to downsize
 # I've found out that 3584 will fit in my RAM, but you can increase this
 # if you've got more.
 # I'm also having issues with my ram chips, maybe try 3072? 2560? 2400? 2048?
@@ -346,7 +346,7 @@ def main():
     # loss: 0.1243 - accuracy: 0.9513 - val_loss: 0.8680 - val_accuracy: 0.7115
     # consider this the number to beat :)
     #
-    # update: this was my 4 million param CNN's result:
+    # update: this was my 4 million param CNN's result at 3072 resolution:
     # loss: 0.0544 - accuracy: 0.9784 - val_loss: 0.1387 - val_accuracy: 0.9516
     # eat your heart out, Francois!
 
@@ -360,6 +360,11 @@ def main():
                     "ckpts/ckpt" + str(epoch), overwrite=True, save_format="h5"
                 )
                 # self.model.save('network',overwrite=True)
+
+    # only uncomment this code if you have a prepared checkpoint to use for output:
+    model.built=True
+    model.load_weights("ckpts/ckpt45")
+    print("Checkpoint loaded.")
 
     model.fit(
         augmented_train_ds,
