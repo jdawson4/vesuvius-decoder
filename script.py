@@ -329,7 +329,8 @@ def main():
     del mask
     del labels
 
-    model = convModel((BUFFER * 2, BUFFER * 2, Z_DIM))
+    #model = convModel((BUFFER * 2, BUFFER * 2, Z_DIM))
+    model = attentionModel((BUFFER * 2, BUFFER * 2, Z_DIM))
     model.summary()
     model.compile(
         # optimizer="adam",

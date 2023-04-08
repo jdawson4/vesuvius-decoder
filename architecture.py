@@ -39,6 +39,7 @@ def upsample(x, filters, apply_batchnorm=False, apply_dropout=False):
 
     return out
 
+# this has exactly 3,922,177 trainable params
 def convModel(input_shape):
     # I'm going to make my own model, rather than take someone else's.
     # That's kinda the whole fun of this challenge, for me!
@@ -73,11 +74,54 @@ def convModel(input_shape):
     model = keras.Model(input, output)
     return model
 
+def attnBlock(input, heads, keyDim, outShape, apply_batchnorm=False, apply_dropout=False):
+    out=keras.layers.MultiHeadAttention(heads,keyDim,output_shape=outShape)(input,input)
+
+    out = keras.layers.Concatenate()([input, out])
+
+    if apply_batchnorm:
+        out=keras.layers.BatchNormalization()(out)
+
+    out=keras.layers.Conv2D(filters=outShape,kernel_size=1,strides=1,padding='same')(out)
+    out = keras.layers.Activation("selu")(out)
+
+    if apply_dropout:
+        out = keras.layers.Dropout(0.25)(out)
+
+    return out
+
+# this has exactly 4,054,881 trainable params
 def attentionModel(input_shape):
     # this model will be based on attention rather than convolutions.
     # Let's see which gives better performance!
     input=keras.Input(input_shape, dtype='float32')
     output=keras.layers.Rescaling(scale=1./127.5, offset=-1.)(input) # MAKE THIS CHOICE BASED ON MIN/MAX FROM THE MAIN SCRIPT!
+
+    # we'll actually do the same thing as above--we'll make a U-net
+    # architecture with convolutional up- and down-scaling, but instead of the
+    # dense convblocks, we'll use attention-based resonant blocks!
+
+    output1=attnBlock(output,8,32,64,False,True)
+    output2=downsample(output1,128,False,True)
+
+    output2=attnBlock(output2,8,32,64,True,False)
+    output3=downsample(output2,128,True,False)
+
+    output3=attnBlock(output3,8,32,128,True,False)
+    output4=downsample(output3,512,True,False)
+
+    output4=attnBlock(output4,8,32,256,True,False)
+    output3=keras.layers.Concatenate()([output3,upsample(output4,256,True,False)])
+
+    output3=attnBlock(output3,8,32,128,True,False)
+    output2=keras.layers.Concatenate()([output2,upsample(output3,128,True,False)])
+
+    output2=attnBlock(output2,8,32,64,True,False)
+    output1=keras.layers.Concatenate()([output1,upsample(output2,64,True,False)])
+
+    output=attnBlock(output1,8,64,64,True,False)
+    output=attnBlock(output,8,64,32,True,False)
+    output=keras.layers.Conv2D(filters=1,kernel_size=1,strides=1,padding="same",activation="sigmoid")(output)
 
     model = keras.Model(input, output)
     return model
