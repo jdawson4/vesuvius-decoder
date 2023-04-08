@@ -362,9 +362,9 @@ def main():
                 # self.model.save('network',overwrite=True)
 
     # only uncomment this code if you have a prepared checkpoint to use for output:
-    model.built=True
-    model.load_weights("ckpts/ckpt45")
-    print("Checkpoint loaded.")
+    #model.built=True
+    #model.load_weights("ckpts/ckpt45")
+    #print("Checkpoint loaded.")
 
     model.fit(
         augmented_train_ds,
