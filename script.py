@@ -19,7 +19,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 import PIL
-import tqdm
+#import tqdm
 from skimage.transform import resize as resize_ski
 
 import glob
@@ -36,9 +36,9 @@ BUFFER = 32  # Half-size of papyrus patches we'll use as model inputs
 Z_DIM = 64  # Number of slices in the z direction. Max value is 64 - Z_START
 Z_START = 0  # Offset of slices in the z direction
 SHARED_HEIGHT = 3712  # Height to resize all papyrii, originally 4000 but my computer is bad so I'll have to downsize
-# I've found out that 3584 will fit in my RAM, but you can increase this
+# I've found out that 3712 will fit in my RAM, but you can increase this
 # if you've got more.
-# I'm also having issues with my ram chips, maybe try 3072? 2560? 2400? 2048?
+# I'm also having issues with my ram chips, maybe try 3072? 2560? 2400? 2048? 3584?
 
 # Model config
 BATCH_SIZE = 32
@@ -349,6 +349,10 @@ def main():
     # update: this was my 4 million param CNN's result at 3072 resolution:
     # loss: 0.0544 - accuracy: 0.9784 - val_loss: 0.1387 - val_accuracy: 0.9516
     # eat your heart out, Francois!
+    #
+    # update: this was my 4 million param CNN's result at 3712 resolution:
+    # loss: 0.0424 - accuracy: 0.9832 - val_loss: 0.1474 - val_accuracy: 0.9524
+    # similar results, but I feel better about this somehow?
 
     class EveryKCallback(keras.callbacks.Callback):
         def __init__(self, epoch_interval=epoch_interval):
