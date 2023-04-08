@@ -90,7 +90,7 @@ def attnBlock(input, heads, keyDim, outShape, apply_batchnorm=False, apply_dropo
 
     return out
 
-# this has exactly 4,054,881 trainable params
+# this has exactly 3,834,705 trainable params
 def attentionModel(input_shape):
     # this model will be based on attention rather than convolutions.
     # Let's see which gives better performance!
@@ -119,8 +119,8 @@ def attentionModel(input_shape):
     output2=attnBlock(output2,8,32,64,True,False)
     output1=keras.layers.Concatenate()([output1,upsample(output2,64,True,False)])
 
-    output=attnBlock(output1,8,64,64,True,False)
-    output=attnBlock(output,8,64,32,True,False)
+    output=attnBlock(output1,8,32,32,True,False)
+    output=attnBlock(output,8,32,16,True,False)
     output=keras.layers.Conv2D(filters=1,kernel_size=1,strides=1,padding="same",activation="sigmoid")(output)
 
     model = keras.Model(input, output)
