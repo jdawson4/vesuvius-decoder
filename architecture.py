@@ -39,12 +39,14 @@ def upsample(x, filters, apply_batchnorm=False, apply_dropout=False):
 
     return out
 
-def get_model(input_shape):
+def convModel(input_shape):
     # I'm going to make my own model, rather than take someone else's.
     # That's kinda the whole fun of this challenge, for me!
+    # this model is based on convolutional networks I've made before. This one
+    # is a U-net with dense layers and connections "across" the U. Lots of
+    # connections everywhere, maybe make a graph of this to visualize!
     input=keras.Input(input_shape, dtype='float32')
     output=keras.layers.Rescaling(scale=1./127.5, offset=-1.)(input) # MAKE THIS CHOICE BASED ON MIN/MAX FROM THE MAIN SCRIPT!
-    #output=keras.layers.Normalization()(input)
 
     output1024=convBlock(output,64,False,True) # output size 1024
     output512=downsample(output1024,64,False,True) # output size 512
@@ -71,6 +73,16 @@ def get_model(input_shape):
     model = keras.Model(input, output)
     return model
 
+def attentionModel(input_shape):
+    # this model will be based on attention rather than convolutions.
+    # Let's see which gives better performance!
+    input=keras.Input(input_shape, dtype='float32')
+    output=keras.layers.Rescaling(scale=1./127.5, offset=-1.)(input) # MAKE THIS CHOICE BASED ON MIN/MAX FROM THE MAIN SCRIPT!
+
+    model = keras.Model(input, output)
+    return model
+
 if __name__=='__main__':
-    model = get_model((64,64,64))
+    #model = convModel((64,64,64))
+    model = attentionModel((64,64,64))
     model.summary()
