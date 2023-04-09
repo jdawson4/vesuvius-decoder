@@ -41,7 +41,7 @@ SHARED_HEIGHT = 3712  # Height to resize all papyrii, originally 4000 but my com
 # I'm also having issues with my ram chips, maybe try 3072? 2560? 2400? 2048? 3584?
 
 # Model config
-BATCH_SIZE = 32
+BATCH_SIZE = 32 # 32 works, maybe higher
 USE_MIXED_PRECISION = False
 USE_JIT_COMPILE = False
 
@@ -317,13 +317,6 @@ def main():
         )
 
     del train_ds
-
-    # important note: the original model is ~2 million params!
-    # it also appears to be using an addition-based residual u-net. I wonder if
-    # this can be done better using concatenation/densenets, either with conv
-    # layers or perhaps with self-attention? This is where I want to experiment!
-    #
-    # new model will be located in architecture.py!
 
     del volume
     del mask

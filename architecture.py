@@ -1,4 +1,9 @@
 # Author: Jacob Dawson
+#
+# important note: the original model is ~2 million params!
+# it also appears to be using an addition-based residual u-net. I wonder if
+# this can be done better using concatenation/densenets, either with conv
+# layers or perhaps with self-attention? This is where I want to experiment!
 
 from tensorflow import keras
 
@@ -105,16 +110,16 @@ def attentionModel(input_shape):
     output2=downsample(output1,128,False,True)
 
     output2=attnBlock(output2,8,32,64,True,False)
-    output3=downsample(output2,128,True,False)
+    #output3=downsample(output2,128,True,False)
 
-    output3=attnBlock(output3,8,32,128,True,False)
-    output4=downsample(output3,512,True,False)
+    #output3=attnBlock(output3,8,32,128,True,False)
+    #output4=downsample(output3,512,True,False)
 
-    output4=attnBlock(output4,8,32,256,True,False)
-    output3=keras.layers.Concatenate()([output3,upsample(output4,256,True,False)])
+    #output4=attnBlock(output4,8,32,256,True,False)
+    #output3=keras.layers.Concatenate()([output3,upsample(output4,256,True,False)])
 
-    output3=attnBlock(output3,8,32,128,True,False)
-    output2=keras.layers.Concatenate()([output2,upsample(output3,128,True,False)])
+    #output3=attnBlock(output3,8,32,128,True,False)
+    #output2=keras.layers.Concatenate()([output2,upsample(output3,128,True,False)])
 
     output2=attnBlock(output2,8,32,64,True,False)
     output1=keras.layers.Concatenate()([output1,upsample(output2,64,True,False)])
