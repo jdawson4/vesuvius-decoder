@@ -19,8 +19,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 import PIL
-#import tqdm
-from skimage.transform import resize as resize_ski
+
+# import tqdm
+# from skimage.transform import resize as resize_ski
 
 import glob
 import time
@@ -41,7 +42,7 @@ SHARED_HEIGHT = 3712  # Height to resize all papyrii, originally 4000 but my com
 # I'm also having issues with my ram chips, maybe try 3072? 2560? 2400? 2048? 3584?
 
 # Model config
-BATCH_SIZE = 32 # 32 works, maybe higher
+BATCH_SIZE = 32  # 32 works, maybe higher
 USE_MIXED_PRECISION = False
 USE_JIT_COMPILE = False
 
@@ -96,13 +97,11 @@ def load_volume(split, index):
     for filename in z_slices_fnames:
         img = PIL.Image.open(filename)
         img = resize(img)
-        z_slice = (
-            np.array(img, dtype="uint16") // 256
+        z_slice = tf.cast(
+            np.array(img, dtype="uint16") // 256, dtype="uint8"
         )  # let's limit this int to be able to fit into an int8
         z_slices.append(z_slice)
-    return tf.cast(
-        tf.stack(z_slices, axis=-1), dtype="uint8"
-    )  # A VERY IMPORTANT CHOICE WAS MADE HERE!
+    return tf.stack(z_slices, axis=-1)  # A VERY IMPORTANT CHOICE WAS MADE HERE!
 
 
 def sample_random_location(shape):
@@ -297,9 +296,7 @@ def main():
     val_ds = val_ds.prefetch(tf.data.AUTOTUNE).batch(BATCH_SIZE)
 
     score = trivial_baseline(val_ds).numpy()
-    print(
-        f"Best validation score achievable trivially: {score * 100:.2f}% accuracy"
-    )
+    print(f"Best validation score achievable trivially: {score * 100:.2f}% accuracy")
 
     for subvolume, label in val_ds.take(1):
         print("VAL_DS LOOKS LIKE:", subvolume.shape, label.shape)
@@ -323,7 +320,7 @@ def main():
     del labels
 
     model = convModel((BUFFER * 2, BUFFER * 2, Z_DIM))
-    #model = attentionModel((BUFFER * 2, BUFFER * 2, Z_DIM))
+    # model = attentionModel((BUFFER * 2, BUFFER * 2, Z_DIM))
     model.summary()
     model.compile(
         # optimizer="adam",
@@ -360,9 +357,9 @@ def main():
                 # self.model.save('network',overwrite=True)
 
     # only uncomment this code if you have a prepared checkpoint to use for output:
-    #model.built=True
-    #model.load_weights("ckpts/ckpt45")
-    #print("Checkpoint loaded.")
+    # model.built=True
+    # model.load_weights("ckpts/ckpt45")
+    # print("Checkpoint loaded.")
 
     model.fit(
         augmented_train_ds,

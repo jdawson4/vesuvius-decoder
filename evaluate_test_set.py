@@ -4,10 +4,11 @@
 # I keep getting OOM errors when this code is after the train code.
 
 from script import *
+from tqdm import tqdm
+from skimage.transform import resize as resize_ski
 
 # Let's do predictions!
 model = keras.models.load_model("model.keras")
-
 
 def compute_predictions_map(split, index):
     print(f"Load data for {split}/{index}")
@@ -51,16 +52,21 @@ def compute_predictions_map(split, index):
     predictions_map /= predictions_map_counts + 1e-7
     return predictions_map
 
-
+gc.collect()
 predictions_map_a = compute_predictions_map(split="test", index="a")
+gc.collect()
 predictions_map_b = compute_predictions_map(split="test", index="b")
+gc.collect()
 
 original_size_a = PIL.Image.open(DATA_DIR + "/test/a/mask.png").size
 predictions_map_a = resize_ski(predictions_map_a, original_size_a).squeeze()
 
+gc.collect()
+
 original_size_b = PIL.Image.open(DATA_DIR + "/test/b/mask.png").size
 predictions_map_b = resize_ski(predictions_map_b, original_size_b).squeeze()
 
+gc.collect()
 
 def rle(predictions_map, threshold):
     flat_img = predictions_map.flatten()
@@ -76,6 +82,12 @@ def rle(predictions_map, threshold):
 
 threshold = 0.5
 
+gc.collect()
+
 rle_a = rle(predictions_map_a, threshold=threshold)
+gc.collect()
+
 rle_b = rle(predictions_map_b, threshold=threshold)
+gc.collect()
+
 print("Id,Predicted\na," + rle_a + "\nb," + rle_b, file=open("submission.csv", "w"))
