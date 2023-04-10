@@ -10,8 +10,7 @@
 # was struggling with, and I wanted to start with it because it seems that he's
 # inviting people to use his code as a jumping-off point for writing their own
 # keras models. What I really want to experiment with/get to is the ability to
-# try different network structures, so I'll largely be adapting from the
-# notebook that monsieur Chollet left on kaggle
+# try different network structures, so I'll largely be adapting from that
 
 # imports here:
 
@@ -332,8 +331,8 @@ def main():
         run_eagerly=True,
     )
 
-    # for no reason at all, I'll note that this is the last line in monsieur
-    # Chollet's training regime:
+    # for no reason at all, I'll note that this is the last line in
+    # FChollet's training regime:
     # loss: 0.1243 - accuracy: 0.9513 - val_loss: 0.8680 - val_accuracy: 0.7115
     # consider this the number to beat :)
     #
