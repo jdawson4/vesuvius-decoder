@@ -10,11 +10,11 @@ from tensorflow import keras
 def convBlock(x1, filters, apply_batchnorm=False, apply_dropout=False):
     x2=keras.layers.Conv2D(filters=filters,kernel_size=3,strides=1,padding="same",activation="selu")(x1)
     c2=keras.layers.Concatenate()([x1,x2])
-    out=keras.layers.Conv2D(filters=filters,kernel_size=3,strides=1,padding="same",activation="selu")(c2)
-    #c3=keras.layers.Concatenate()([x1,x2,x3])
-    #x4=keras.layers.Conv2D(filters=filters,kernel_size=3,strides=1,padding="same",activation="selu")(c3)
-    #c4=keras.layers.Concatenate()([x1,x2,x3,x4])
-    #x5=keras.layers.Conv2D(filters=filters,kernel_size=3,strides=1,padding="same",activation="selu")(c4)
+    x3=keras.layers.Conv2D(filters=filters,kernel_size=3,strides=1,padding="same",activation="selu")(c2)
+    c3=keras.layers.Concatenate()([x1,x2,x3])
+    x4=keras.layers.Conv2D(filters=filters,kernel_size=3,strides=1,padding="same",activation="selu")(c3)
+    c4=keras.layers.Concatenate()([x1,x2,x3,x4])
+    out=keras.layers.Conv2D(filters=filters,kernel_size=3,strides=1,padding="same",activation="selu")(c4)
 
     if apply_batchnorm:
         out = keras.layers.BatchNormalization()(out)
@@ -132,6 +132,6 @@ def attentionModel(input_shape):
     return model
 
 if __name__=='__main__':
-    #model = convModel((64,64,64))
-    model = attentionModel((64,64,64))
+    model = convModel((64,64,64))
+    #model = attentionModel((64,64,64))
     model.summary()
