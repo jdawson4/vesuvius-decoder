@@ -354,6 +354,8 @@ def main():
                     "ckpts/ckpt" + str(epoch), overwrite=True, save_format="h5"
                 )
                 # self.model.save('network',overwrite=True)
+                keras.backend.clear_session()
+                gc.collect()
 
     # only uncomment this code if you have a prepared checkpoint to use for output:
     # model.built=True
